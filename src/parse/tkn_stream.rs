@@ -1,5 +1,6 @@
 use crate::lex::{tokenize, Token};
 
+#[derive(Debug)]
 pub struct TokenStream<'s> {
     stream: Vec<Token>,
     input: &'s str,

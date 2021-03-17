@@ -1,9 +1,549 @@
+use std::rc::Rc;
+
+use crate::parse::span::Span;
+
 pub struct Item {
     kind: ItemKind,
     span: Span,
 }
 
+pub enum ItemKind {
+    /// TODO: make it possible to compile crates together.
+    Krate,
+    /// TODO: same as above.
+    Use,
+
+    Static(Ty, Expr),
+    Const(Ty, Expr),
+    Fn(FnKind),
+    Mod(Vec<Item>),
+    TyAlias(Ty),
+    Enum,
+    Struct,
+    Union,
+    Trait,
+    Impl,
+}
+
 pub struct Expr {
     kind: ExprKind,
+    span: Span,
+}
+
+pub enum ExprKind {
+    Arr(Vec<Expr>),
+    ConstBlk(Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
+    MethodCall(Path, Vec<Expr>),
+    Tup(Vec<Expr>),
+    Binary {
+        op: BinOp,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+    },
+    Unary {
+        op: UnOp,
+        lhs: Box<Expr>,
+    },
+    Lit(Literal),
+    If {
+        ifexpr: Box<Expr>,
+        blk: Box<Block>,
+        els: Option<Box<Expr>>,
+    },
+    While {
+        cond: Box<Expr>,
+        blk: Box<Block>,
+        label: Option<Ident>,
+    },
+    For {
+        p: Box<Pat>,
+        expr: Box<Expr>,
+        blk: Box<Block>,
+        label: Option<Ident>,
+    },
+    Loop {
+        blk: Box<Block>,
+        label: Option<Ident>,
+    },
+    Match {
+        expr: Box<Expr>,
+        arms: Vec<Arm>,
+    },
+    Assign {
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+    },
+    AssignOp {
+        op: BinOp,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+    },
+    Field(Box<Expr>, Ident),
+    Index(Box<Expr>, Box<Expr>),
+    Range {
+        start: Option<Box<Expr>>,
+        end: Option<Box<Expr>>,
+        bound: RangeLimits,
+    },
+    Underscore,
+    Path(Path),
+    AddrOf {
+        brw: BorrowKind,
+        mutable: bool,
+        expr: Box<Expr>,
+    },
+    Break {
+        label: Option<Ident>,
+        expr: Option<Box<Expr>>,
+    },
+    Continue(Option<Ident>),
+    Ret(Option<Box<Expr>>),
+}
+
+pub struct Stmt {
+    kind: StmtKind,
+    span: Span,
+}
+
+pub enum StmtKind {
+    Local(Box<Local>),
+    Item(Box<Item>),
+    Expr(Box<Expr>),
+    Semi(Box<Expr>),
+    Empty,
+}
+
+pub struct Pat {
+    kind: PatKind,
+    span: Span,
+}
+
+pub enum PatKind {
+    Wild,
+    /// A `PatKind::Ident` may either be a new bound variable (`ref mut binding @ OPT_SUBPATTERN`),
+    /// or a unit struct/variant pattern, or a const pattern (in the last two cases the third
+    /// field must be `None`). Disambiguation cannot be done with parser alone, so it happens
+    /// during name resolution.
+    Ident {
+        bind: BindingMode,
+        id: Ident,
+        sub: Option<Box<Pat>>,
+    },
+    Struct {
+        name: Path,
+        fields: Vec<FieldPat>,
+    },
+    TupleStruct,
+    Or(Vec<Pat>),
+    Path(Path),
+    Tuple(Vec<Pat>),
+    Ref {
+        mutable: bool,
+        pat: Box<Pat>,
+    },
+    Lit(Box<Expr>),
+    Range {
+        start: Option<Box<Expr>>,
+        end: Option<Box<Expr>>,
+        bound: RangeEnd,
+    },
+    Slice(Vec<Pat>),
+    Rest,
+    Paren(Box<Pat>),
+}
+
+pub struct Arm {
+    pat: Box<Pat>,
+    guard: Option<Box<Expr>>,
+    body: Box<Expr>,
+    span: Span,
+}
+
+pub struct Block {
+    stmts: Vec<Stmt>,
+    span: Span,
+}
+
+pub struct Local {
+    pat: Pat,
+    ty: Option<Ty>,
+    init: Option<Expr>,
+    span: Span,
+}
+
+pub struct FieldPat {
+    id: Ident,
+    pat: Box<Pat>,
+    span: Span,
+}
+
+pub struct FnKind {
+    sig: FnSig,
+    gen: (),
+    block: Block,
+}
+
+pub struct FnSig {
+    inputs: Vec<Param>,
+    ret: FnReturn,
+}
+
+pub struct Param {
+    ty: Ty,
+    pat: Pat,
+    span: Span,
+}
+
+pub enum FnReturn {
+    None(Span),
+    Explicit(Ty),
+}
+
+pub struct Ty {
+    kind: Box<TyKind>,
+    span: Span,
+}
+
+pub enum TyKind {
+    Slice(Ty),
+    Arr(Ty, Expr),
+    Ref(Lifetime, MutTy),
+    FnPtr(Box<BareFn>),
+    Tup(Vec<Ty>),
+    Path(Path),
+    SelfKw(MutTy),
+    TraitObj,
+    ImplTrait,
+    Paren(Box<Ty>),
+}
+
+pub enum Lifetime {
+    Anon,
+    Named(Ident),
+    None,
+}
+
+pub struct BareFn {}
+
+pub struct MutTy {
+    ty: Box<Ty>,
+    mutable: bool,
+    span: Span,
+}
+
+pub struct Path {
+    seg: Vec<Ident>,
+    span: Span,
+}
+
+pub struct Literal {
+    kind: LitKind,
+    span: Span,
+}
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub enum LitKind {
+    /// A string literal (`"foo"`).
+    Str(String, StrStyle),
+    /// A byte string (`b"foo"`).
+    ByteStr(Rc<[u8]>),
+    /// A byte char (`b'f'`).
+    Byte(u8),
+    /// A character literal (`'a'`).
+    Char(char),
+    /// An integer literal (`1`).
+    Int(u128, LitIntType),
+    /// A float literal (`1f64` or `1E10f64`).
+    Float(String, LitFloatType),
+    /// A boolean literal.
+    Bool(bool),
+    /// Placeholder for a literal that wasn't well-formed in some way.
+    Err(String),
+}
+
+/// Type of the integer literal based on provided suffix.
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub enum LitIntType {
+    /// e.g. `42_i32`.
+    Signed(IntTy),
+    /// e.g. `42_u32`.
+    Unsigned(UintTy),
+    /// e.g. `42`.
+    Unsuffixed,
+}
+
+/// Type of the float literal based on provided suffix.
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub enum LitFloatType {
+    /// A float literal with a suffix (`1f32` or `1E10f32`).
+    Suffixed(FloatTy),
+    /// A float literal without a suffix (`1.0 or 1.0E10`).
+    Unsuffixed,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum FloatTy {
+    F32,
+    F64,
+}
+
+impl FloatTy {
+    pub fn name_str(self) -> &'static str {
+        match self {
+            FloatTy::F32 => "f32",
+            FloatTy::F64 => "f64",
+        }
+    }
+
+    pub fn bit_width(self) -> u64 {
+        match self {
+            FloatTy::F32 => 32,
+            FloatTy::F64 => 64,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum IntTy {
+    Isize,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+}
+
+impl IntTy {
+    pub fn name_str(&self) -> &'static str {
+        match *self {
+            IntTy::Isize => "isize",
+            IntTy::I8 => "i8",
+            IntTy::I16 => "i16",
+            IntTy::I32 => "i32",
+            IntTy::I64 => "i64",
+            IntTy::I128 => "i128",
+        }
+    }
+
+    pub fn bit_width(&self) -> Option<u64> {
+        Some(match *self {
+            IntTy::Isize => return None,
+            IntTy::I8 => 8,
+            IntTy::I16 => 16,
+            IntTy::I32 => 32,
+            IntTy::I64 => 64,
+            IntTy::I128 => 128,
+        })
+    }
+
+    pub fn normalize(&self, target_width: u32) -> Self {
+        match self {
+            IntTy::Isize => match target_width {
+                16 => IntTy::I16,
+                32 => IntTy::I32,
+                64 => IntTy::I64,
+                _ => unreachable!(),
+            },
+            _ => *self,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Debug)]
+pub enum UintTy {
+    Usize,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+}
+
+impl UintTy {
+    pub fn name_str(&self) -> &'static str {
+        match *self {
+            UintTy::Usize => "usize",
+            UintTy::U8 => "u8",
+            UintTy::U16 => "u16",
+            UintTy::U32 => "u32",
+            UintTy::U64 => "u64",
+            UintTy::U128 => "u128",
+        }
+    }
+
+    pub fn bit_width(&self) -> Option<u64> {
+        Some(match *self {
+            UintTy::Usize => return None,
+            UintTy::U8 => 8,
+            UintTy::U16 => 16,
+            UintTy::U32 => 32,
+            UintTy::U64 => 64,
+            UintTy::U128 => 128,
+        })
+    }
+
+    pub fn normalize(&self, target_width: u32) -> Self {
+        match self {
+            UintTy::Usize => match target_width {
+                16 => UintTy::U16,
+                32 => UintTy::U32,
+                64 => UintTy::U64,
+                _ => unreachable!(),
+            },
+            _ => *self,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Copy, Hash, Eq, PartialEq)]
+pub enum StrStyle {
+    /// A regular string, like `"foo"`.
+    Cooked,
+    /// A raw string, like `r##"foo"##`.
+    ///
+    /// The value is the number of `#` symbols used.
+    Raw(u16),
+}
+
+pub struct BinOp {
+    kind: BinOpKind,
+    span: Span,
+}
+
+#[derive(Clone, PartialEq, Debug, Copy)]
+pub enum BinOpKind {
+    /// The `+` operator (addition)
+    Add,
+    /// The `-` operator (subtraction)
+    Sub,
+    /// The `*` operator (multiplication)
+    Mul,
+    /// The `/` operator (division)
+    Div,
+    /// The `%` operator (modulus)
+    Rem,
+    /// The `&&` operator (logical and)
+    And,
+    /// The `||` operator (logical or)
+    Or,
+    /// The `^` operator (bitwise xor)
+    BitXor,
+    /// The `&` operator (bitwise and)
+    BitAnd,
+    /// The `|` operator (bitwise or)
+    BitOr,
+    /// The `<<` operator (shift left)
+    Shl,
+    /// The `>>` operator (shift right)
+    Shr,
+    /// The `==` operator (equality)
+    Eq,
+    /// The `<` operator (less than)
+    Lt,
+    /// The `<=` operator (less than or equal to)
+    Le,
+    /// The `!=` operator (not equal to)
+    Ne,
+    /// The `>=` operator (greater than or equal to)
+    Ge,
+    /// The `>` operator (greater than)
+    Gt,
+}
+
+impl BinOpKind {
+    pub fn to_string(&self) -> &'static str {
+        use BinOpKind::*;
+        match *self {
+            Add => "+",
+            Sub => "-",
+            Mul => "*",
+            Div => "/",
+            Rem => "%",
+            And => "&&",
+            Or => "||",
+            BitXor => "^",
+            BitAnd => "&",
+            BitOr => "|",
+            Shl => "<<",
+            Shr => ">>",
+            Eq => "==",
+            Lt => "<",
+            Le => "<=",
+            Ne => "!=",
+            Ge => ">=",
+            Gt => ">",
+        }
+    }
+    pub fn lazy(&self) -> bool {
+        matches!(self, BinOpKind::And | BinOpKind::Or)
+    }
+
+    pub fn is_comparison(&self) -> bool {
+        use BinOpKind::*;
+        // Note for developers: please keep this as is;
+        // we want compilation to fail if another variant is added.
+        match *self {
+            Eq | Lt | Le | Ne | Gt | Ge => true,
+            And | Or | Add | Sub | Mul | Div | Rem | BitXor | BitAnd | BitOr | Shl | Shr => false,
+        }
+    }
+}
+
+/// Unary operator.
+///
+/// Note that `&data` is not an operator, it's an `AddrOf` expression.
+#[derive(Clone, Debug, Copy)]
+pub enum UnOp {
+    /// The `*` operator for dereferencing
+    Deref,
+    /// The `!` operator for logical inversion
+    Not,
+    /// The `-` operator for negation
+    Neg,
+}
+
+impl UnOp {
+    pub fn to_string(op: UnOp) -> &'static str {
+        match op {
+            UnOp::Deref => "*",
+            UnOp::Not => "!",
+            UnOp::Neg => "-",
+        }
+    }
+}
+
+/// The kind of borrow in an `AddrOf` expression,
+/// e.g., `&place` or `&raw const place`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BorrowKind {
+    /// A normal borrow, `&$expr` or `&mut $expr`.
+    /// The resulting type is either `&'a T` or `&'a mut T`
+    /// where `T = typeof($expr)` and `'a` is some lifetime.
+    Ref,
+    /// A raw borrow, `&raw const $expr` or `&raw mut $expr`.
+    /// The resulting type is either `*const T` or `*mut T`
+    /// where `T = typeof($expr)`.
+    Raw,
+}
+
+pub enum BindingMode {
+    Value { mutable: bool },
+    Ref { mutable: bool },
+}
+
+/// Wether the range includes the end or not.
+pub enum RangeLimits {
+    Inclusive,
+    Closed,
+}
+
+/// Wether the range includes the end or not.
+pub enum RangeEnd {
+    Included,
+    Excluded,
+}
+
+pub struct Ident {
     span: Span,
 }

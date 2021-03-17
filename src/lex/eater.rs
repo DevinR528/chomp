@@ -4,6 +4,7 @@ use std::str::Chars;
 ///
 /// Next characters can be peeked via `nth_char` method,
 /// and position can be shifted forward via `bump` method.
+#[derive(Debug)]
 pub struct Cursor<'a> {
     initial_len: usize,
     chars: Chars<'a>,

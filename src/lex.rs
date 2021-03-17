@@ -481,6 +481,8 @@ impl Cursor<'_> {
     fn whitespace(&mut self) -> TokenKind {
         debug_assert!(is_whitespace(self.prev()));
 
+        dbg!(&self);
+
         // Usual ASCII suspects
         // '\u{0009}'   // \t
         // | '\u{000A}' // \n
@@ -499,22 +501,20 @@ impl Cursor<'_> {
         // // Dedicated whitespace characters from Unicode
         // | '\u{2028}' // LINE SEPARATOR
         // | '\u{2029}' // PARAGRAPH SEPARATOR
-        match self.bump() {
-            Some('\u{0020}') => Whitespace {
+        match self.prev() {
+            '\u{0020}' => Whitespace {
                 kind: WhitespaceKind::Space,
             },
-            Some('\u{000A}') | Some('\u{2028}') | Some('\u{2029}') | Some('\u{2085}') => {
-                Whitespace {
-                    kind: WhitespaceKind::NewLine,
-                }
-            }
-            Some('\u{000D}') if self.first() == '\u{000A}' => {
+            '\u{000A}' | '\u{2028}' | '\u{2029}' | '\u{2085}' => Whitespace {
+                kind: WhitespaceKind::NewLine,
+            },
+            '\u{000D}' if self.first() == '\u{000A}' => {
                 self.bump();
                 Whitespace {
                     kind: WhitespaceKind::NewLine,
                 }
             }
-            _ => unreachable!("Implement more whitespace"),
+            tkn => unreachable!("Implement more whitespace {:?}", tkn),
         }
     }
 
