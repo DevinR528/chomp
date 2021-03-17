@@ -146,9 +146,8 @@ pub enum LiteralKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WhitespaceKind {
-    Space(usize),
-    NewLine(usize),
-    SpaceNewline(usize, usize),
+    Space,
+    NewLine,
 }
 
 /// Error produced validating a raw string. Represents cases like:
@@ -482,56 +481,40 @@ impl Cursor<'_> {
     fn whitespace(&mut self) -> TokenKind {
         debug_assert!(is_whitespace(self.prev()));
 
-        let mut space_cnt = 0;
-        let mut new_cnt = 0;
-        while is_whitespace(self.first()) && !self.is_eof() {
-            // Usual ASCII suspects
-            // '\u{0009}'   // \t
-            // | '\u{000A}' // \n
-            // | '\u{000B}' // vertical tab
-            // | '\u{000C}' // form feed
-            // | '\u{000D}' // \r
-            // | '\u{0020}' // space
+        // Usual ASCII suspects
+        // '\u{0009}'   // \t
+        // | '\u{000A}' // \n
+        // | '\u{000B}' // vertical tab
+        // | '\u{000C}' // form feed
+        // | '\u{000D}' // \r
+        // | '\u{0020}' // space
 
-            // // NEXT LINE from latin1
-            // | '\u{0085}'
+        // // NEXT LINE from latin1
+        // | '\u{0085}'
 
-            // // Bidi markers
-            // | '\u{200E}' // LEFT-TO-RIGHT MARK
-            // | '\u{200F}' // RIGHT-TO-LEFT MARK
+        // // Bidi markers
+        // | '\u{200E}' // LEFT-TO-RIGHT MARK
+        // | '\u{200F}' // RIGHT-TO-LEFT MARK
 
-            // // Dedicated whitespace characters from Unicode
-            // | '\u{2028}' // LINE SEPARATOR
-            // | '\u{2029}' // PARAGRAPH SEPARATOR
-            match self.bump() {
-                // TODO: tab size?
-                Some('\u{0009}') => space_cnt += 4, // \t
-                Some('\u{0020}') => space_cnt += 1, // space
-                // In order
-                // \n, vertical tab, form feed, unicode line sep, para sep, latin1 next line
-                Some('\u{000A}') | Some('\u{000B}') | Some('\u{000C}') | Some('\u{2028}')
-                | Some('\u{2029}') | Some('\u{0085}') => new_cnt += 1,
-                // Carriage return followed by \n (windows line ending)
-                Some('\u{000D}') => {
-                    if self.first() == '\u{000A}' {
-                        self.bump();
-                        new_cnt += 1;
-                    }
+        // // Dedicated whitespace characters from Unicode
+        // | '\u{2028}' // LINE SEPARATOR
+        // | '\u{2029}' // PARAGRAPH SEPARATOR
+        match self.bump() {
+            Some('\u{0020}') => Whitespace {
+                kind: WhitespaceKind::Space,
+            },
+            Some('\u{000A}') | Some('\u{2028}') | Some('\u{2029}') | Some('\u{2085}') => {
+                Whitespace {
+                    kind: WhitespaceKind::NewLine,
                 }
-                _ => unreachable!("Whitespace bump failed"),
             }
-        }
-        match (space_cnt, new_cnt) {
-            (0, 0) => panic!("Impossible empty whitespace"),
-            (s, 0) => Whitespace {
-                kind: WhitespaceKind::Space(space_cnt),
-            },
-            (0, n) => Whitespace {
-                kind: WhitespaceKind::NewLine(new_cnt),
-            },
-            (s, n) => Whitespace {
-                kind: WhitespaceKind::SpaceNewline(space_cnt, new_cnt),
-            },
+            Some('\u{000D}') if self.first() == '\u{000A}' => {
+                self.bump();
+                Whitespace {
+                    kind: WhitespaceKind::NewLine,
+                }
+            }
+            _ => unreachable!("Implement more whitespace"),
         }
     }
 

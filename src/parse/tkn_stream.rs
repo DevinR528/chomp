@@ -1,6 +1,15 @@
-use crate::lex::Token;
+use crate::lex::{tokenize, Token};
 
 pub struct TokenStream<'s> {
     stream: Vec<Token>,
     input: &'s str,
+}
+
+impl<'s> TokenStream<'s> {
+    pub fn new(input: &'s str) -> Self {
+        Self {
+            stream: tokenize(input).collect(),
+            input,
+        }
+    }
 }
