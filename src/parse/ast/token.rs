@@ -1,12 +1,14 @@
 use std::rc::Rc;
 
-use crate::parse::span::Span;
+use crate::parse::span::{Ident, Span};
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Item {
     kind: ItemKind,
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum ItemKind {
     /// TODO: make it possible to compile crates together.
     Krate,
@@ -25,11 +27,13 @@ pub enum ItemKind {
     Impl,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Expr {
     kind: ExprKind,
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum ExprKind {
     Arr(Vec<Expr>),
     ConstBlk(Box<Expr>),
@@ -101,11 +105,13 @@ pub enum ExprKind {
     Ret(Option<Box<Expr>>),
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Stmt {
     kind: StmtKind,
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum StmtKind {
     Local(Box<Local>),
     Item(Box<Item>),
@@ -114,11 +120,13 @@ pub enum StmtKind {
     Empty,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Pat {
     kind: PatKind,
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum PatKind {
     Wild,
     /// A `PatKind::Ident` may either be a new bound variable (`ref mut binding @ OPT_SUBPATTERN`),
@@ -153,6 +161,7 @@ pub enum PatKind {
     Paren(Box<Pat>),
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Arm {
     pat: Box<Pat>,
     guard: Option<Box<Expr>>,
@@ -160,11 +169,13 @@ pub struct Arm {
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Block {
     stmts: Vec<Stmt>,
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Local {
     pat: Pat,
     ty: Option<Ty>,
@@ -172,39 +183,46 @@ pub struct Local {
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct FieldPat {
     id: Ident,
     pat: Box<Pat>,
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct FnKind {
     sig: FnSig,
     gen: (),
     block: Block,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct FnSig {
     inputs: Vec<Param>,
     ret: FnReturn,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Param {
     ty: Ty,
     pat: Pat,
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum FnReturn {
     None(Span),
     Explicit(Ty),
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Ty {
     kind: Box<TyKind>,
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum TyKind {
     Slice(Ty),
     Arr(Ty, Expr),
@@ -218,25 +236,30 @@ pub enum TyKind {
     Paren(Box<Ty>),
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum Lifetime {
     Anon,
     Named(Ident),
     None,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct BareFn {}
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct MutTy {
     ty: Box<Ty>,
     mutable: bool,
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Path {
     seg: Vec<Ident>,
     span: Span,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Literal {
     kind: LitKind,
     span: Span,
@@ -406,12 +429,13 @@ pub enum StrStyle {
     Raw(u16),
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct BinOp {
     kind: BinOpKind,
     span: Span,
 }
 
-#[derive(Clone, PartialEq, Debug, Copy)]
+#[derive(Clone, PartialEq, Hash, Eq, Debug, Copy)]
 pub enum BinOpKind {
     /// The `+` operator (addition)
     Add,
@@ -493,7 +517,7 @@ impl BinOpKind {
 /// Unary operator.
 ///
 /// Note that `&data` is not an operator, it's an `AddrOf` expression.
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Copy)]
 pub enum UnOp {
     /// The `*` operator for dereferencing
     Deref,
@@ -515,7 +539,7 @@ impl UnOp {
 
 /// The kind of borrow in an `AddrOf` expression,
 /// e.g., `&place` or `&raw const place`.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub enum BorrowKind {
     /// A normal borrow, `&$expr` or `&mut $expr`.
     /// The resulting type is either `&'a T` or `&'a mut T`
@@ -527,23 +551,22 @@ pub enum BorrowKind {
     Raw,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum BindingMode {
     Value { mutable: bool },
     Ref { mutable: bool },
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 /// Wether the range includes the end or not.
 pub enum RangeLimits {
     Inclusive,
     Closed,
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 /// Wether the range includes the end or not.
 pub enum RangeEnd {
     Included,
     Excluded,
-}
-
-pub struct Ident {
-    span: Span,
 }

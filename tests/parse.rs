@@ -8,6 +8,6 @@ fn parse_stuff() {
     let z = x + y;
 }"#;
 
-    let stream = parse::TokenStream::new(input);
-    println!("{:?}", stream);
+    let stream = parse::AstBuilder::parse(input);
+    println!("{:#?}", stream);
 }

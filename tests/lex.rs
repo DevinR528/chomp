@@ -152,24 +152,24 @@ fn smoke_test() {
         "/* my source file */ fn main() { println!(\"zebra\"); }\n",
         expect![[r#"
             Token { kind: BlockComment { doc_style: None, terminated: true }, len: 20 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: Space }, len: 1 }
             Token { kind: Ident, len: 2 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: Space }, len: 1 }
             Token { kind: Ident, len: 4 }
             Token { kind: OpenParen, len: 1 }
             Token { kind: CloseParen, len: 1 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: Space }, len: 1 }
             Token { kind: OpenBrace, len: 1 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: Space }, len: 1 }
             Token { kind: Ident, len: 7 }
             Token { kind: Bang, len: 1 }
             Token { kind: OpenParen, len: 1 }
             Token { kind: Literal { kind: Str { terminated: true }, suffix_start: 7 }, len: 7 }
             Token { kind: CloseParen, len: 1 }
             Token { kind: Semi, len: 1 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: Space }, len: 1 }
             Token { kind: CloseBrace, len: 1 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
         "#]],
     )
 }
@@ -189,25 +189,25 @@ fn comment_flavors() {
 /*! inner doc block */
 ",
         expect![[r#"
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: LineComment { doc_style: None }, len: 7 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: LineComment { doc_style: None }, len: 17 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: LineComment { doc_style: Some(Outer) }, len: 18 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: LineComment { doc_style: Some(Inner) }, len: 18 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: BlockComment { doc_style: None, terminated: true }, len: 11 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: BlockComment { doc_style: None, terminated: true }, len: 4 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: BlockComment { doc_style: None, terminated: true }, len: 18 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: BlockComment { doc_style: Some(Outer), terminated: true }, len: 22 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: BlockComment { doc_style: Some(Inner), terminated: true }, len: 22 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
         "#]],
     )
 }
@@ -229,9 +229,9 @@ fn characters() {
         "'a' ' ' '\\n'",
         expect![[r#"
             Token { kind: Literal { kind: Char { terminated: true }, suffix_start: 3 }, len: 3 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: Space }, len: 1 }
             Token { kind: Literal { kind: Char { terminated: true }, suffix_start: 3 }, len: 3 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: Space }, len: 1 }
             Token { kind: Literal { kind: Char { terminated: true }, suffix_start: 4 }, len: 4 }
         "#]],
     );
@@ -275,31 +275,31 @@ r###"raw"###suffix
 br###"raw"###suffix
 "####,
         expect![[r#"
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: Char { terminated: true }, suffix_start: 3 }, len: 3 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: Byte { terminated: true }, suffix_start: 4 }, len: 4 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: Str { terminated: true }, suffix_start: 3 }, len: 3 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: ByteStr { terminated: true }, suffix_start: 4 }, len: 4 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: Int { base: Decimal, empty_int: false }, suffix_start: 4 }, len: 4 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: Int { base: Binary, empty_int: false }, suffix_start: 5 }, len: 5 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: Int { base: Hexadecimal, empty_int: false }, suffix_start: 5 }, len: 5 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: Float { base: Decimal, empty_exponent: false }, suffix_start: 3 }, len: 3 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: Float { base: Decimal, empty_exponent: false }, suffix_start: 6 }, len: 6 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: Int { base: Decimal, empty_int: false }, suffix_start: 1 }, len: 3 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: RawStr { n_hashes: 3, err: None }, suffix_start: 12 }, len: 18 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
             Token { kind: Literal { kind: RawByteStr { n_hashes: 3, err: None }, suffix_start: 13 }, len: 19 }
-            Token { kind: Whitespace, len: 1 }
+            Token { kind: Whitespace { kind: NewLine }, len: 1 }
         "#]],
     )
 }

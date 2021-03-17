@@ -481,8 +481,6 @@ impl Cursor<'_> {
     fn whitespace(&mut self) -> TokenKind {
         debug_assert!(is_whitespace(self.prev()));
 
-        dbg!(&self);
-
         // Usual ASCII suspects
         // '\u{0009}'   // \t
         // | '\u{000A}' // \n
