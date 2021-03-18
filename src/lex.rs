@@ -16,6 +16,14 @@ pub struct Token {
     pub len: usize,
 }
 
+impl Default for Token {
+    fn default() -> Self {
+        Self {
+            kind: TokenKind::Unknown,
+            len: 0,
+        }
+    }
+}
 impl Token {
     fn new(kind: TokenKind, len: usize) -> Token {
         Token { kind, len }
@@ -872,6 +880,131 @@ impl Cursor<'_> {
     fn eat_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
         while predicate(self.first()) && !self.is_eof() {
             self.bump();
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TokenMatch {
+    // Multi-char tokens:
+    /// "// comment"
+    LineComment,
+    /// `/* block comment */`
+    ///
+    /// Block comments can be recursive, so the sequence like `/* /* */`
+    /// will not be considered terminated and will result in a parsing error.
+    BlockComment,
+    /// Whitespace characters sequence.
+    Whitespace,
+    /// "ident" or "continue"
+    /// At this step keywords are also considered identifiers.
+    Ident,
+    /// "r#ident"
+    RawIdent,
+    /// "12_u8", "1.0e-40", "b"123"". See `LiteralKind` for more details.
+    Literal,
+    /// "'a"
+    Lifetime,
+
+    // One-char tokens:
+    /// ";"
+    Semi,
+    /// ","
+    Comma,
+    /// "."
+    Dot,
+    /// "("
+    OpenParen,
+    /// ")"
+    CloseParen,
+    /// "{"
+    OpenBrace,
+    /// "}"
+    CloseBrace,
+    /// "["
+    OpenBracket,
+    /// "]"
+    CloseBracket,
+    /// "@"
+    At,
+    /// "#"
+    Pound,
+    /// "~"
+    Tilde,
+    /// "?"
+    Question,
+    /// ":"
+    Colon,
+    /// "$"
+    Dollar,
+    /// "="
+    Eq,
+    /// "!"
+    Bang,
+    /// "<"
+    Lt,
+    /// ">"
+    Gt,
+    /// "-"
+    Minus,
+    /// "&"
+    And,
+    /// "|"
+    Or,
+    /// "+"
+    Plus,
+    /// "*"
+    Star,
+    /// "/"
+    Slash,
+    /// "^"
+    Caret,
+    /// "%"
+    Percent,
+
+    /// Unknown token, not expected by the lexer, e.g. "№"
+    Unknown,
+}
+
+impl PartialEq<TokenKind> for TokenMatch {
+    fn eq(&self, other: &TokenKind) -> bool {
+        match (self, other) {
+            (TokenMatch::LineComment, LineComment { .. })
+            | (TokenMatch::BlockComment, BlockComment { .. })
+            | (TokenMatch::Whitespace, Whitespace { .. })
+            | (TokenMatch::Ident, Ident)
+            | (TokenMatch::RawIdent, RawIdent)
+            | (TokenMatch::Literal, Literal { .. })
+            | (TokenMatch::Lifetime, Lifetime { .. })
+            | (TokenMatch::Semi, Semi)
+            | (TokenMatch::Comma, Comma)
+            | (TokenMatch::Dot, Dot)
+            | (TokenMatch::OpenParen, OpenParen)
+            | (TokenMatch::CloseParen, CloseParen)
+            | (TokenMatch::OpenBrace, OpenBrace)
+            | (TokenMatch::CloseBrace, CloseParen)
+            | (TokenMatch::OpenBracket, OpenBracket)
+            | (TokenMatch::CloseBracket, CloseBracket)
+            | (TokenMatch::At, At)
+            | (TokenMatch::Pound, Pound)
+            | (TokenMatch::Tilde, Tilde)
+            | (TokenMatch::Question, Question)
+            | (TokenMatch::Colon, Colon)
+            | (TokenMatch::Dollar, Dollar)
+            | (TokenMatch::Eq, Eq)
+            | (TokenMatch::Bang, Bang)
+            | (TokenMatch::Lt, Lt)
+            | (TokenMatch::Gt, Gt)
+            | (TokenMatch::Minus, Minus)
+            | (TokenMatch::And, And)
+            | (TokenMatch::Or, Or)
+            | (TokenMatch::Plus, Plus)
+            | (TokenMatch::Star, Star)
+            | (TokenMatch::Slash, Slash)
+            | (TokenMatch::Caret, Caret)
+            | (TokenMatch::Percent, Percent)
+            | (TokenMatch::Unknown, Unknown) => true,
+            _ => false,
         }
     }
 }

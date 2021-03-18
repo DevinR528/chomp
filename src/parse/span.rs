@@ -1,4 +1,6 @@
-use std::ops::Range;
+use std::{convert::TryFrom, ops::Range};
+
+use super::ast::error::ParseError;
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Span {
@@ -20,19 +22,47 @@ pub struct Ident {
     span: Span,
 }
 
-impl Ident {}
+impl Ident {
+    pub fn new(span: Span) -> Self {
+        Self { span }
+    }
+
+    pub fn span(&self) -> &Span {
+        &self.span
+    }
+
+    pub fn name<'a>(&self, input: &'a str) -> &'a str {
+        self.span.text(input)
+    }
+}
 
 macro_rules! keywords {
     ($($tkn:ident: $rep:expr,)*) => {
         pub mod kw {
-            $(
-                pub struct $tkn;
-                impl $tkn {
-                    pub fn text(&self) -> &'static str {
-                        $rep
+            pub enum Keywords {
+                $($tkn),*
+            }
+            impl std::convert::TryFrom<&str> for Keywords {
+                type Error = $crate::parse::ast::error::ParseError;
+
+                fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
+                    std::result::Result::Ok(match s {
+                        $(
+                            $rep => Self::$tkn,
+                        )*
+                        _ => std::result::Result::Err($crate::parse::ast::error::ParseError::IncorrectToken)?
+                    })
+                }
+            }
+            impl Keywords {
+                pub fn text(&self) -> &'static str {
+                    match self {
+                        $(
+                            Self::$tkn => $rep,
+                        )*
                     }
                 }
-            )*
+            }
         }
     };
 }
