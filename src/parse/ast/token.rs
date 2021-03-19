@@ -4,8 +4,8 @@ use crate::parse::span::{Ident, Span};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Item {
-    kind: ItemKind,
-    span: Span,
+    pub kind: ItemKind,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -29,8 +29,8 @@ pub enum ItemKind {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Expr {
-    kind: ExprKind,
-    span: Span,
+    pub kind: ExprKind,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -107,8 +107,8 @@ pub enum ExprKind {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Stmt {
-    kind: StmtKind,
-    span: Span,
+    pub kind: StmtKind,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -122,8 +122,8 @@ pub enum StmtKind {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Pat {
-    kind: PatKind,
-    span: Span,
+    pub kind: PatKind,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -163,51 +163,51 @@ pub enum PatKind {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Arm {
-    pat: Box<Pat>,
-    guard: Option<Box<Expr>>,
-    body: Box<Expr>,
-    span: Span,
+    pub pat: Box<Pat>,
+    pub guard: Option<Box<Expr>>,
+    pub body: Box<Expr>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Block {
-    stmts: Vec<Stmt>,
-    span: Span,
+    pub stmts: Vec<Stmt>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Local {
-    pat: Pat,
-    ty: Option<Ty>,
-    init: Option<Expr>,
-    span: Span,
+    pub pat: Pat,
+    pub ty: Option<Ty>,
+    pub init: Option<Expr>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct FieldPat {
-    id: Ident,
-    pat: Box<Pat>,
-    span: Span,
+    pub id: Ident,
+    pub pat: Box<Pat>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct FnKind {
-    sig: FnSig,
-    gen: (),
-    block: Block,
+    pub sig: FnSig,
+    pub gen: (),
+    pub block: Block,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct FnSig {
-    inputs: Vec<Param>,
-    ret: FnReturn,
+    pub inputs: Vec<Param>,
+    pub ret: FnReturn,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Param {
-    ty: Ty,
-    pat: Pat,
-    span: Span,
+    pub ty: Ty,
+    pub pat: Pat,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -218,8 +218,8 @@ pub enum FnReturn {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Ty {
-    kind: Box<TyKind>,
-    span: Span,
+    pub kind: Box<TyKind>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -234,6 +234,7 @@ pub enum TyKind {
     TraitObj,
     ImplTrait,
     Paren(Box<Ty>),
+    RawPtr(MutTy),
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -248,21 +249,21 @@ pub struct BareFn {}
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct MutTy {
-    ty: Box<Ty>,
-    mutable: bool,
-    span: Span,
+    pub ty: Box<Ty>,
+    pub mutable: bool,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Path {
-    seg: Vec<Ident>,
-    span: Span,
+    pub seg: Vec<Ident>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Literal {
-    kind: LitKind,
-    span: Span,
+    pub kind: LitKind,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]

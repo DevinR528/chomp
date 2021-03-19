@@ -21,3 +21,12 @@ fn parse_const() {
     builder.parse().unwrap();
     println!("{:#?}", builder.items());
 }
+
+#[test]
+fn parse_const_call() {
+    let input = r#"pub const FOO: usize = "hello".len();"#;
+
+    let mut builder = parse::AstBuilder::new(input);
+    builder.parse().unwrap();
+    println!("{:#?}", builder.items());
+}

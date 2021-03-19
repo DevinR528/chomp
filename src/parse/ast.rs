@@ -1,13 +1,13 @@
 use std::{collections::HashMap, convert::TryInto};
 
-use crate::lex::{tokenize, Token as LexToken, TokenKind, TokenMatch};
+use crate::lex::{self, tokenize, Token as LexToken, TokenKind, TokenMatch};
 
-use super::span::{kw, Ident, Span};
+use super::span::{self, kw, Ident, Span};
 
 pub mod error;
 pub mod token;
 
-use ast::{Ty, TyKind};
+use ast::{Expr, ExprKind, Item, ItemKind, Lifetime, Literal, MutTy, Path, Ty, TyKind};
 use error::ParseError;
 use token as ast;
 
@@ -99,10 +99,24 @@ impl<'a> AstBuilder<'a> {
         // Eat the `const` token
         self.eat_tkn();
         self.eat_if(&TokenMatch::Whitespace);
+
         let id = self.make_ident()?;
+
         self.eat_if(&TokenMatch::Colon);
         self.eat_if(&TokenMatch::Whitespace);
+
         let ty = self.make_ty()?;
+
+        self.eat_if(&TokenMatch::Whitespace);
+        self.eat_if(&TokenMatch::Eq);
+        self.eat_if(&TokenMatch::Whitespace);
+
+        let expr = self.make_expr()?;
+
+        self.items.push(Item {
+            kind: ItemKind::Const(ty, expr),
+            span: Span::new(start..self.input_idx),
+        });
         Ok(())
     }
 
@@ -120,25 +134,118 @@ impl<'a> AstBuilder<'a> {
     }
 
     fn make_ty(&mut self) -> ParseResult<Ty> {
+        let start = self.input_idx;
         println!("make ty {}", self.input_curr());
         println!("make ty {:?}", self.curr);
 
-        match self.curr.kind {
-            TokenKind::Ident => {}
+        let kind = match self.curr.kind {
+            TokenKind::Ident => {
+                if kw::is_keyword(self.input_curr()) {
+                    todo!()
+                } else {
+                    let seg = self.make_seg()?;
+                    self.eat_if(&TokenMatch::Whitespace);
+                    TyKind::Path(Path {
+                        seg,
+                        span: Span::new(start..self.input_idx),
+                    })
+                }
+            }
+            TokenKind::RawIdent => {
+                todo!()
+            }
+            TokenKind::OpenParen => {
+                todo!()
+            }
+            TokenKind::OpenBrace => {
+                todo!()
+            }
+            TokenKind::OpenBracket => {
+                todo!()
+            }
+            TokenKind::And => {
+                // Eat the `&`
+                self.eat_while(&TokenMatch::And);
+
+                let lifetime = if let TokenKind::Lifetime { .. } = self.curr.kind {
+                    // TODO: Anon lifetimes
+                    let lt = Lifetime::Named(self.make_ident()?);
+                    // Since we are cheating a bit by using `make_ident` on the lifetime tkn
+                    // we have to manually eat it
+                    self.eat_tkn();
+                    lt
+                } else {
+                    Lifetime::None
+                };
+
+                self.eat_if(&TokenMatch::Whitespace);
+
+                //
+                TyKind::Ref(
+                    lifetime,
+                    MutTy {
+                        ty: Box::new(self.make_ty()?),
+                        mutable: self.eat_if_kw(kw::Keywords::Mut),
+                        span: self.curr_span(),
+                    },
+                )
+            }
+            TokenKind::Star => {
+                // Eat `*`
+                self.eat_tkn();
+
+                TyKind::RawPtr(MutTy {
+                    ty: Box::new(self.make_ty()?),
+                    mutable: self.eat_if_kw(kw::Keywords::Mut),
+                    span: self.curr_span(),
+                })
+            }
+            // TODO: is this possible for types?
+            // TokenKind::Lt => {}
+            // TokenKind::Gt => {}
+            tkn => todo!("Unknown token {:?}", tkn),
+        };
+
+        Ok(Ty {
+            kind: Box::new(kind),
+            span: Span::new(start..self.input_idx),
+        })
+    }
+
+    fn make_expr(&mut self) -> ParseResult<Expr> {
+        let start = self.input_idx;
+
+        let kind = match self.curr.kind {
+            TokenKind::Ident => {
+                let keyword: kw::Keywords = self.input_curr().try_into()?;
+                match keyword {
+                    _ => todo!(),
+                }
+            }
             TokenKind::RawIdent => {}
-            TokenKind::Literal { kind, suffix_start } => {}
+            TokenKind::Literal { kind, suffix_start } => todo!(),
             TokenKind::Lifetime { starts_with_number } => {}
             TokenKind::OpenParen => {}
             TokenKind::OpenBrace => {}
             TokenKind::OpenBracket => {}
-            // TokenKind::Lt => {}
-            // TokenKind::Gt => {}
-            TokenKind::And => {}
-            TokenKind::Star => {}
             tkn => todo!("Unknown token {:?}", tkn),
-        }
+        };
+    }
 
-        Ok(todo!())
+    fn make_seg(&mut self) -> ParseResult<Vec<Ident>> {
+        let mut ids = vec![];
+        loop {
+            self.eat_seq(&[TokenMatch::Colon, TokenMatch::Colon]);
+            ids.push(self.make_ident()?);
+            if self.cmp_seq(&[TokenMatch::Colon, TokenMatch::Colon])
+                || self.cmp_seq(&[TokenMatch::Ident])
+            {
+                continue;
+            } else {
+                break;
+            }
+        }
+        Ok(ids)
     }
 
     /// FIXME: for now we ignore attributes.
@@ -148,7 +255,7 @@ impl<'a> AstBuilder<'a> {
             TokenKind::OpenBracket
         ) {
             self.eat_until(&TokenMatch::CloseBracket);
-            // eat the CloseBracket
+            // eat the `]`
             self.eat_tkn();
         }
     }
@@ -160,23 +267,33 @@ impl<'a> AstBuilder<'a> {
         }
     }
 
+    /// Eat the key word iff it matches `kw` and return true if eaten.
+    fn eat_if_kw(&mut self, kw: kw::Keywords) -> bool {
+        if kw.text() == self.input_curr() {
+            self.eat_tkn();
+            return true;
+        }
+        false
+    }
+
     /// Check if a sequence matches `iter`.
-    fn cmp_seq<I: Iterator<Item = TokenMatch>>(&mut self, mut iter: I) -> bool {
-        let first = iter.next().unwrap_or(TokenMatch::Unknown);
-        if first != self.curr.kind {
+    fn cmp_seq<'i>(&self, mut iter: impl IntoIterator<Item = &'i TokenMatch>) -> bool {
+        let mut iter = iter.into_iter();
+        let first = iter.next().unwrap_or(&TokenMatch::Unknown);
+        if first != &self.curr.kind {
             return false;
         }
 
         let tkns = self.tokens.iter();
-        tkns.zip(iter).all(|(ours, cmp)| cmp == ours.kind)
+        tkns.zip(iter).all(|(ours, cmp)| cmp == &ours.kind)
     }
 
     /// Throw away a sequence of tokens.
     ///
     /// Returns true if all the given tokens were matched.
-    fn eat_seq<I: Iterator<Item = TokenMatch>>(&mut self, iter: I) -> bool {
+    fn eat_seq<'i>(&mut self, iter: impl IntoIterator<Item = &'i TokenMatch>) -> bool {
         for kind in iter {
-            if kind == self.curr.kind {
+            if kind == &self.curr.kind {
                 self.eat_tkn();
             } else {
                 return false;
@@ -188,6 +305,13 @@ impl<'a> AstBuilder<'a> {
     /// Eat tokens until `pat` matches current.
     fn eat_until(&mut self, pat: &TokenMatch) {
         while pat != &self.curr.kind {
+            self.eat_tkn();
+        }
+    }
+
+    /// Eat tokens until `pat` matches current.
+    fn eat_while(&mut self, pat: &TokenMatch) {
+        while pat == &self.curr.kind {
             self.eat_tkn();
         }
     }
@@ -213,6 +337,11 @@ impl<'a> AstBuilder<'a> {
     /// Peek the next `n` tokens.
     fn peek_n(&self, n: usize) -> impl Iterator<Item = &TokenKind> {
         self.tokens.iter().take(n).map(|t| &t.kind)
+    }
+
+    /// Peek until the closure returns `false`.
+    fn peek_until<P: FnMut(&&LexToken) -> bool>(&self, p: P) -> impl Iterator<Item = &LexToken> {
+        self.tokens.iter().take_while(p)
     }
 
     /// The input `str` from current index to `stop`.

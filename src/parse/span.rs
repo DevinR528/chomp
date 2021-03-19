@@ -39,6 +39,22 @@ impl Ident {
 macro_rules! keywords {
     ($($tkn:ident: $rep:expr,)*) => {
         pub mod kw {
+            pub fn is_keyword(s: &str) -> bool {
+                match s {
+                    // These are not actual keywords so overwrite them
+                    // to return false
+                    "auto" => false,
+                    "catch" => false,
+                    "default" => false,
+                    "macro_rules" => false,
+                    "raw" => false,
+                    "union" => false,
+                    $(
+                        $rep => true,
+                    )*
+                    _ => false,
+                }
+            }
             pub enum Keywords {
                 $($tkn),*
             }
