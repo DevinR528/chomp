@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::parse::span::{Ident, Span};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -113,11 +111,18 @@ pub struct Stmt {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum StmtKind {
+    /// A local (let) binding.
     Local(Box<Local>),
+    /// An item definition.
     Item(Box<Item>),
+    /// Expr without trailing semi-colon.
     Expr(Box<Expr>),
+    /// Expr with a trailing semi-colon.
     Semi(Box<Expr>),
+    /// Just a semi.
     Empty,
+    // TODO:
+    // MacCall(Box<MacCallStmt>)
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -142,7 +147,10 @@ pub enum PatKind {
         name: Path,
         fields: Vec<FieldPat>,
     },
-    TupleStruct,
+    TupleStruct {
+        name: Path,
+        data: Vec<Pat>,
+    },
     Or(Vec<Pat>),
     Path(Path),
     Tuple(Vec<Pat>),
@@ -159,6 +167,26 @@ pub enum PatKind {
     Slice(Vec<Pat>),
     Rest,
     Paren(Box<Pat>),
+}
+
+impl PatKind {
+    pub fn ident(&self) -> Option<&Ident> {
+        match self {
+            PatKind::Wild => None,
+            PatKind::Ident { bind, id, sub } => Some(id),
+            PatKind::Struct { name, fields } => name.seg.first(),
+            PatKind::TupleStruct { name, data } => name.seg.first(),
+            PatKind::Or(_) => None,
+            PatKind::Path(path) => path.seg.first(),
+            PatKind::Tuple(_) => None,
+            PatKind::Ref { mutable, pat } => pat.kind.ident(),
+            PatKind::Lit(_) => None,
+            PatKind::Range { start, end, bound } => None,
+            PatKind::Slice(_) => None,
+            PatKind::Rest => None,
+            PatKind::Paren(_) => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -212,8 +240,8 @@ pub struct Param {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum FnReturn {
-    None(Span),
-    Explicit(Ty),
+    None,
+    Explicit(Box<Ty>),
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -224,17 +252,17 @@ pub struct Ty {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum TyKind {
-    Slice(Ty),
-    Arr(Ty, Expr),
+    Slice(Box<Ty>),
+    Arr(Box<Ty>, Expr),
     Ref(Lifetime, MutTy),
     FnPtr(Box<BareFn>),
     Tup(Vec<Ty>),
-    Path(Path),
-    SelfKw(MutTy),
+    Path { qualified: Qualified, p: Path },
     TraitObj,
     ImplTrait,
     Paren(Box<Ty>),
     RawPtr(MutTy),
+    Never,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -261,6 +289,16 @@ pub struct Path {
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub enum Qualified {
+    Empty,
+    Type {
+        ty: Path,
+        path_span: Span,
+        pos: usize,
+    },
+}
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Literal {
     pub kind: LitKind,
     pub span: Span,
@@ -271,7 +309,7 @@ pub enum LitKind {
     /// A string literal (`"foo"`).
     Str(String, StrStyle),
     /// A byte string (`b"foo"`).
-    ByteStr(Rc<[u8]>),
+    ByteStr(Box<[u8]>),
     /// A byte char (`b'f'`).
     Byte(u8),
     /// A character literal (`'a'`).
@@ -432,8 +470,8 @@ pub enum StrStyle {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct BinOp {
-    kind: BinOpKind,
-    span: Span,
+    pub kind: BinOpKind,
+    pub span: Span,
 }
 
 #[derive(Clone, PartialEq, Hash, Eq, Debug, Copy)]

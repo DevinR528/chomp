@@ -1,6 +1,6 @@
 use std::{convert::TryFrom, ops::Range};
 
-use super::ast::error::ParseError;
+use super::ast_build::error::ParseError;
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Span {
@@ -20,19 +20,20 @@ impl Span {
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Ident {
     span: Span,
+    text: String,
 }
 
 impl Ident {
-    pub fn new(span: Span) -> Self {
-        Self { span }
+    pub fn new(span: Span, text: String) -> Self {
+        Self { span, text }
     }
 
     pub fn span(&self) -> &Span {
         &self.span
     }
 
-    pub fn name<'a>(&self, input: &'a str) -> &'a str {
-        self.span.text(input)
+    pub fn name(&self) -> &str {
+        &self.text
     }
 }
 
@@ -59,14 +60,14 @@ macro_rules! keywords {
                 $($tkn),*
             }
             impl std::convert::TryFrom<&str> for Keywords {
-                type Error = $crate::parse::ast::error::ParseError;
+                type Error = $crate::parse::ast_build::error::ParseError;
 
                 fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
                     std::result::Result::Ok(match s {
                         $(
                             $rep => Self::$tkn,
                         )*
-                        _ => std::result::Result::Err($crate::parse::ast::error::ParseError::IncorrectToken)?
+                        _ => std::result::Result::Err($crate::parse::ast_build::error::ParseError::IncorrectToken)?
                     })
                 }
             }

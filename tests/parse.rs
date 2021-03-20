@@ -14,8 +14,35 @@ fn parse_function() {
 }
 
 #[test]
-fn parse_const() {
+fn parse_const_str() {
     let input = r#"pub const FOO: &'static str = "hello";"#;
+
+    let mut builder = parse::AstBuilder::new(input);
+    builder.parse().unwrap();
+    println!("{:#?}", builder.items());
+}
+
+#[test]
+fn parse_const_uint() {
+    let input = r#"pub const FOO: u32 = 42;"#;
+
+    let mut builder = parse::AstBuilder::new(input);
+    builder.parse().unwrap();
+    println!("{:#?}", builder.items());
+}
+
+#[test]
+fn parse_const_sint() {
+    let input = r#"pub const FOO: i16 = -1;"#;
+
+    let mut builder = parse::AstBuilder::new(input);
+    builder.parse().unwrap();
+    println!("{:#?}", builder.items());
+}
+
+#[test]
+fn parse_const_float() {
+    let input = r#"pub const FOO: f64 = 0.42;"#;
 
     let mut builder = parse::AstBuilder::new(input);
     builder.parse().unwrap();

@@ -1,4 +1,4 @@
-pub mod ast;
+pub mod ast_build;
 pub mod span;
 
-pub use ast::AstBuilder;
+pub use ast_build::AstBuilder;
