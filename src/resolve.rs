@@ -111,22 +111,75 @@ impl TypeResolver {
     pub fn func_body(&mut self, blk: &tkn::Block, it_id: ItemId) {
         for stmt in &blk.stmts {
             match &stmt.kind {
-                tkn::StmtKind::Local(loc) => match &loc.pat.kind {
-                    tkn::PatKind::Ident { bind, id, sub } => {
-                        self.add_var(&it_id, id, loc.ty.as_ref());
+                tkn::StmtKind::Local(loc) => {
+                    let ty = if let Some(ty) = loc.ty {
+                        Some(ty)
+                    } else {
+                        loc.init.map(|ex| self.type_from_expr(ex))
+                    };
+                    match &loc.pat.kind {
+                        tkn::PatKind::Ident { bind, id, sub } => {
+                            self.add_var(&it_id, id, ty.as_ref());
+                        }
+                        tkn::PatKind::Struct { name, fields } => {}
+                        tkn::PatKind::TupleStruct { name, data } => {}
+                        tkn::PatKind::Tuple(_) => {}
+                        tkn::PatKind::Ref { mutable, pat } => {}
+                        tkn::PatKind::Paren(_) => {}
+                        todo_tkn => todo!("{:?}", todo_tkn),
                     }
-                    tkn::PatKind::Struct { name, fields } => {}
-                    tkn::PatKind::TupleStruct { name, data } => {}
-                    tkn::PatKind::Tuple(_) => {}
-                    tkn::PatKind::Ref { mutable, pat } => {}
-                    tkn::PatKind::Paren(_) => {}
-                    todo_tkn => todo!("{:?}", todo_tkn),
-                },
+                }
                 tkn::StmtKind::Item(_) => {}
                 tkn::StmtKind::Expr(_) => {}
                 tkn::StmtKind::Semi(_) => {}
                 tkn::StmtKind::Empty => {}
             }
+        }
+    }
+
+    fn type_from_expr(&self, expr: &tkn::Expr) -> tkn::Ty {
+        match expr.kind {
+            tkn::ExprKind::Arr(_) => {}
+            tkn::ExprKind::ConstBlk(_) => {}
+            tkn::ExprKind::Call(_, _) => {}
+            tkn::ExprKind::MethodCall(_, _) => {}
+            tkn::ExprKind::Tup(_) => {}
+            tkn::ExprKind::Binary { op, lhs, rhs } => {}
+            tkn::ExprKind::Unary { op, lhs } => {}
+            tkn::ExprKind::Lit(lit) => match lit.kind {
+                tkn::LitKind::Str(_, s) => tkn::Ty {
+                    span: lit.span,
+                    kind: tkn::TyKind::
+                }
+                tkn::LitKind::ByteStr(_) => {}
+                tkn::LitKind::Byte(_) => {}
+                tkn::LitKind::Char(_) => {}
+                tkn::LitKind::Int(_, _) => {}
+                tkn::LitKind::Float(_, _) => {}
+                tkn::LitKind::Bool(_) => {}
+                tkn::LitKind::Err(_) => {}
+            },
+            tkn::ExprKind::If { ifexpr, blk, els } => {}
+            tkn::ExprKind::While { cond, blk, label } => {}
+            tkn::ExprKind::For {
+                p,
+                expr,
+                blk,
+                label,
+            } => {}
+            tkn::ExprKind::Loop { blk, label } => {}
+            tkn::ExprKind::Match { expr, arms } => {}
+            tkn::ExprKind::Assign { lhs, rhs } => {}
+            tkn::ExprKind::AssignOp { op, lhs, rhs } => {}
+            tkn::ExprKind::Field(_, _) => {}
+            tkn::ExprKind::Index(_, _) => {}
+            tkn::ExprKind::Range { start, end, bound } => {}
+            tkn::ExprKind::Underscore => {}
+            tkn::ExprKind::Path(_) => {}
+            tkn::ExprKind::AddrOf { brw, mutable, expr } => {}
+            tkn::ExprKind::Break { label, expr } => {}
+            tkn::ExprKind::Continue(_) => {}
+            tkn::ExprKind::Ret(_) => {}
         }
     }
 
