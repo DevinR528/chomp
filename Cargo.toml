@@ -8,8 +8,19 @@ edition = "2018"
 
 [dependencies]
 unicode-xid = "0.2.0"
-fxhash = "0.2.1"
+rustc-hash = "1.1.0"
 syntax = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
+base_db = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
+hir = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
+hir_def = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
+hir_ty = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
+hir_expand = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
+ide_db = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
+
+
+chalk-solve = { version = "0.60", default-features = false }
+chalk-ir = "0.60"
+chalk-recursive = "0.60"
 
 [dev-dependencies]
 expect-test = "1.0"
