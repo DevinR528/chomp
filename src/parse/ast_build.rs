@@ -27,7 +27,7 @@ pub type ParseResult<T> = Result<T, ParseError>;
 #[derive(Debug)]
 pub struct AstBuilder {
     root: SyntaxNode,
-    items: Vec<tkn::Item>,
+    items: Vec<ast::Item>,
     /// Since we are relying on the user to give us correct code this just
     /// keeps track of generic things and their uses so we can emit monomorphized
     /// versions of generic whatevers.
@@ -49,7 +49,7 @@ impl AstBuilder {
         }
     }
 
-    pub fn items(&self) -> &[tkn::Item] {
+    pub fn items(&self) -> &[ast::Item] {
         &self.items
     }
 
@@ -60,8 +60,7 @@ impl AstBuilder {
     pub fn parse(&mut self) -> ParseResult<()> {
         let items = self.root.children();
         for item in items.flat_map(ast::Item::cast) {
-            let i = self.parse_item(item)?;
-            self.items.push(i);
+            self.items.push(item);
         }
         Ok(())
     }

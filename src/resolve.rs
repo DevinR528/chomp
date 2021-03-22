@@ -1,19 +1,79 @@
 use std::hash::{Hash, Hasher};
 
 use fxhash::{FxHashMap, FxHashSet, FxHasher64};
+use syntax::ast::{
+    self, ArgListOwner, AstNode, AttrsOwner, GenericParamsOwner, LoopBodyOwner, ModuleItemOwner,
+    NameOwner, TypeBoundsOwner,
+};
 
-use crate::parse::{ast_build::token as tkn, span::Ident};
+mod fir;
+mod intern;
+
+use intern::{TyId, TypeIntern};
 
 pub type ScopeId = u64;
 
-pub type NodeId = u64;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NodeId(usize);
 
-pub type ItemId = u64;
+impl NodeId {
+    pub fn new<T: AstNode>(node: T) -> Self {
+        Self(node.syntax().index())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ItemId(usize);
+
+impl ItemId {
+    pub fn new<T: AstNode>(node: &T) -> Self {
+        Self(node.syntax().index())
+    }
+}
 
 #[derive(Debug)]
-pub enum TyId {
-    Known(u64),
-    Unknown,
+pub struct Ident {
+    id: NodeId,
+}
+
+#[derive(Debug)]
+pub enum Stmt {
+    Local(),
+    Expr(),
+}
+
+#[derive(Debug)]
+pub struct TyContext {}
+
+#[derive(Debug)]
+pub struct BodyContext {
+    stmts: Vec<Stmt>,
+}
+
+#[derive(Debug)]
+pub struct ArgContext {
+    ident: Ident,
+    ty: TyId,
+}
+
+#[derive(Debug)]
+pub struct FnContext {
+    name: String,
+    uses: Vec<NodeId>,
+    args: Vec<ArgContext>,
+    body: BodyContext,
+    ret: TyId,
+}
+
+#[derive(Debug)]
+pub enum ItemKind {
+    Fn(FnContext),
+}
+
+#[derive(Debug)]
+pub struct ItemContext {
+    scope: Scope,
+    kind: ItemKind,
 }
 
 /// The scope kind and the restrictions placed on vars.
@@ -51,150 +111,125 @@ impl Scope {
         }
     }
 
-    fn add_ident(&mut self, id: &Ident, ty: Option<&tkn::Ty>) {
-        let mut hasher = FxHasher64::default();
-        let hash = id.hash(&mut hasher);
-        let id = hasher.finish();
-
-        self.vis.insert(id);
-
-        let ty = if let Some(ty) = ty {
-            let mut hasher = FxHasher64::default();
-            let hash = ty.hash(&mut hasher);
-            let id = hasher.finish();
-            TyId::Known(id)
-        } else {
-            TyId::Unknown
-        };
-
-        self.id_type.insert(id, ty);
-    }
+    pub fn add_node(&mut self, n: NodeId, ty: TyContext) {}
 }
 #[derive(Debug, Default)]
 pub struct TypeResolver {
-    scope_map: FxHashMap<ItemId, Scope>,
-    rev_scope_map: FxHashMap<ItemId, FxHashMap<NodeId, ScopeId>>,
+    types: TypeIntern,
+    items: FxHashMap<ItemId, ItemContext>,
     type_map: FxHashMap<NodeId, TyId>,
     interactions: FxHashMap<NodeId, Vec<NodeId>>,
-    rev_inter: FxHashMap<NodeId, Vec<NodeId>>,
 }
 
 impl TypeResolver {
-    pub fn resolve(items: &[tkn::Item]) -> Self {
+    pub fn resolve(items: &[ast::Item]) -> Self {
         let mut resolver = Self::default();
         for item in items {
-            match &item.kind {
-                tkn::ItemKind::Krate => {}
-                tkn::ItemKind::Use => {}
-                tkn::ItemKind::Static(_, _) => {}
-                tkn::ItemKind::Const(_, _) => {}
-                tkn::ItemKind::Fn(func) => {
-                    let id = resolver.enter_item(func);
-                    resolver.func_params(&func.sig.inputs);
-                    resolver.func_body(&func.block, id);
-                    resolver.func_return(func, &func.sig.ret);
-                }
-                tkn::ItemKind::Mod(_) => {}
-                tkn::ItemKind::TyAlias(_) => {}
-                tkn::ItemKind::Enum => {}
-                tkn::ItemKind::Struct => {}
-                tkn::ItemKind::Union => {}
-                tkn::ItemKind::Trait => {}
-                tkn::ItemKind::Impl => {}
+            match &item {
+                ast::Item::Const(_) => {}
+                ast::Item::Enum(_) => {}
+                ast::Item::ExternBlock(_) => {}
+                ast::Item::ExternCrate(_) => {}
+                ast::Item::Fn(func) => resolver.alloc_func(func),
+                ast::Item::Impl(_) => {}
+                ast::Item::MacroCall(_) => {}
+                ast::Item::MacroRules(_) => {}
+                ast::Item::MacroDef(_) => {}
+                ast::Item::Module(_) => {}
+                ast::Item::Static(_) => {}
+                ast::Item::Struct(_) => {}
+                ast::Item::Trait(_) => {}
+                ast::Item::TypeAlias(_) => {}
+                ast::Item::Union(_) => {}
+                ast::Item::Use(_) => {}
             }
         }
         resolver
     }
 
-    pub fn func_params(&mut self, inputs: &[tkn::Param]) {}
-
-    pub fn func_body(&mut self, blk: &tkn::Block, it_id: ItemId) {
-        for stmt in &blk.stmts {
-            match &stmt.kind {
-                tkn::StmtKind::Local(loc) => {
-                    let ty = if let Some(ty) = loc.ty {
-                        Some(ty)
-                    } else {
-                        loc.init.map(|ex| self.type_from_expr(ex))
-                    };
-                    match &loc.pat.kind {
-                        tkn::PatKind::Ident { bind, id, sub } => {
-                            self.add_var(&it_id, id, ty.as_ref());
-                        }
-                        tkn::PatKind::Struct { name, fields } => {}
-                        tkn::PatKind::TupleStruct { name, data } => {}
-                        tkn::PatKind::Tuple(_) => {}
-                        tkn::PatKind::Ref { mutable, pat } => {}
-                        tkn::PatKind::Paren(_) => {}
-                        todo_tkn => todo!("{:?}", todo_tkn),
-                    }
-                }
-                tkn::StmtKind::Item(_) => {}
-                tkn::StmtKind::Expr(_) => {}
-                tkn::StmtKind::Semi(_) => {}
-                tkn::StmtKind::Empty => {}
-            }
-        }
-    }
-
-    fn type_from_expr(&self, expr: &tkn::Expr) -> tkn::Ty {
-        match expr.kind {
-            tkn::ExprKind::Arr(_) => {}
-            tkn::ExprKind::ConstBlk(_) => {}
-            tkn::ExprKind::Call(_, _) => {}
-            tkn::ExprKind::MethodCall(_, _) => {}
-            tkn::ExprKind::Tup(_) => {}
-            tkn::ExprKind::Binary { op, lhs, rhs } => {}
-            tkn::ExprKind::Unary { op, lhs } => {}
-            tkn::ExprKind::Lit(lit) => match lit.kind {
-                tkn::LitKind::Str(_, s) => tkn::Ty {
-                    span: lit.span,
-                    kind: tkn::TyKind::
-                }
-                tkn::LitKind::ByteStr(_) => {}
-                tkn::LitKind::Byte(_) => {}
-                tkn::LitKind::Char(_) => {}
-                tkn::LitKind::Int(_, _) => {}
-                tkn::LitKind::Float(_, _) => {}
-                tkn::LitKind::Bool(_) => {}
-                tkn::LitKind::Err(_) => {}
+    pub fn alloc_func(&mut self, func: &ast::Fn) {
+        let id = ItemId::new(func);
+        let mut scope = Scope::new(ScopeKind::Function);
+        let args = self.alloc_params(&mut scope, func.param_list().unwrap());
+        let body = self.alloc_body(&mut scope, func.body().unwrap());
+        let ret = self.fn_ret(func.ret_type().unwrap());
+        self.items.insert(
+            id,
+            ItemContext {
+                scope,
+                kind: ItemKind::Fn(FnContext {
+                    name: func.name().unwrap().to_string(),
+                    args,
+                    ret,
+                    body,
+                    uses: vec![],
+                }),
             },
-            tkn::ExprKind::If { ifexpr, blk, els } => {}
-            tkn::ExprKind::While { cond, blk, label } => {}
-            tkn::ExprKind::For {
-                p,
-                expr,
-                blk,
-                label,
-            } => {}
-            tkn::ExprKind::Loop { blk, label } => {}
-            tkn::ExprKind::Match { expr, arms } => {}
-            tkn::ExprKind::Assign { lhs, rhs } => {}
-            tkn::ExprKind::AssignOp { op, lhs, rhs } => {}
-            tkn::ExprKind::Field(_, _) => {}
-            tkn::ExprKind::Index(_, _) => {}
-            tkn::ExprKind::Range { start, end, bound } => {}
-            tkn::ExprKind::Underscore => {}
-            tkn::ExprKind::Path(_) => {}
-            tkn::ExprKind::AddrOf { brw, mutable, expr } => {}
-            tkn::ExprKind::Break { label, expr } => {}
-            tkn::ExprKind::Continue(_) => {}
-            tkn::ExprKind::Ret(_) => {}
+        );
+    }
+
+    pub fn alloc_body(&mut self, scope: &mut Scope, blk: ast::BlockExpr) -> BodyContext {
+        todo!()
+    }
+
+    pub fn alloc_params(&mut self, scope: &mut Scope, params: ast::ParamList) -> Vec<ArgContext> {
+        let mut args = vec![];
+
+        if let Some(this) = params.self_param() {
+            todo!();
+            scope.vis.insert(NodeId(0));
         }
+
+        for param in params.params() {
+            let ident = match param.pat().unwrap() {
+                ast::Pat::IdentPat(ident) => {
+                    let id = NodeId::new(ident);
+                    Ident { id }
+                }
+                ast::Pat::BoxPat(_) => todo!(),
+                ast::Pat::RestPat(_) => todo!(),
+                ast::Pat::LiteralPat(lit) => todo!(),
+                ast::Pat::MacroPat(_) => todo!(),
+                ast::Pat::OrPat(_) => todo!(),
+                ast::Pat::ParenPat(_) => todo!(),
+                ast::Pat::PathPat(_) => todo!(),
+                ast::Pat::WildcardPat(_) => todo!(),
+                ast::Pat::RangePat(_) => todo!(),
+                ast::Pat::RecordPat(_) => todo!(),
+                ast::Pat::RefPat(_) => todo!(),
+                ast::Pat::SlicePat(_) => todo!(),
+                ast::Pat::TuplePat(_) => todo!(),
+                ast::Pat::TupleStructPat(_) => todo!(),
+                ast::Pat::ConstBlockPat(_) => todo!(),
+            };
+            let ty = match param.ty().unwrap() {
+                ast::Type::ArrayType(_) => todo!("ArrayType"),
+                ast::Type::DynTraitType(_) => todo!("DynTraitType"),
+                ast::Type::FnPtrType(_) => todo!("FnPtrType"),
+                ast::Type::ForType(_) => todo!("ForType"),
+                ast::Type::ImplTraitType(_) => todo!("ImplTraitType"),
+                ast::Type::InferType(_) => todo!("InferType"),
+                ast::Type::MacroType(_) => todo!("MacroType"),
+                ast::Type::NeverType(_) => todo!("NeverType"),
+                ast::Type::ParenType(_) => todo!("ParenType"),
+                ast::Type::PathType(path_ty) => TyContext {},
+                ast::Type::PtrType(ptr) => todo!("PtrType"),
+                ast::Type::RefType(ref_ty) => todo!("RefType"),
+                ast::Type::SliceType(_) => todo!("SliceType"),
+                ast::Type::TupleType(_) => todo!("TupleType"),
+            };
+
+            let ty_id = self.add_node(ident.id, ty);
+
+            args.push(ArgContext { ident, ty: ty_id });
+        }
+
+        args
     }
 
-    pub fn func_return(&mut self, func: &tkn::FnKind, inputs: &tkn::FnReturn) {}
-
-    pub fn enter_item(&mut self, item: impl Hash) -> ItemId {
-        let mut hasher = FxHasher64::default();
-        let hash = item.hash(&mut hasher);
-        let item = hasher.finish();
-
-        self.scope_map.insert(item, Scope::new(ScopeKind::Item));
-        item
-    }
-
-    fn add_var(&mut self, it_id: &ItemId, id: &Ident, ty: Option<&tkn::Ty>) {
-        self.scope_map.get_mut(it_id).unwrap().add_ident(id, ty);
+    fn add_node(&mut self, n: NodeId, ty: TyContext) -> TyId {
+        let tid = self.types.insert(ty);
+        self.type_map.insert(n, tid);
+        tid
     }
 }
