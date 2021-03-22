@@ -9,7 +9,7 @@ fn resolve_num_type() {
 
     let mut builder = parse::AstBuilder::new(input);
     builder.parse().unwrap();
-    println!("{:#?}", builder.items());
+    // println!("{:#?}", builder.items());
 
     let resolver = TypeResolver::resolve(builder.items());
     println!("{:#?}", resolver);

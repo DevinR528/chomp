@@ -32,7 +32,6 @@ pub struct AstBuilder {
     /// keeps track of generic things and their uses so we can emit monomorphized
     /// versions of generic whatevers.
     generic_resolver: FxHashMap<(), ()>,
-    type_resolver: TypeResolver,
 }
 
 impl AstBuilder {
@@ -45,16 +44,11 @@ impl AstBuilder {
             root: source.syntax().clone(),
             items: vec![],
             generic_resolver: FxHashMap::default(),
-            type_resolver: TypeResolver::default(),
         }
     }
 
     pub fn items(&self) -> &[ast::Item] {
         &self.items
-    }
-
-    pub fn type_res(&self) -> &TypeResolver {
-        &self.type_resolver
     }
 
     pub fn parse(&mut self) -> ParseResult<()> {
