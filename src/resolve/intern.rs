@@ -1,4 +1,6 @@
-use fxhash::FxHashMap;
+use std::hash::{Hash, Hasher};
+
+use fxhash::{FxHashMap, FxHasher64};
 
 use super::{TyContext, TyKind};
 
@@ -24,12 +26,14 @@ impl Default for TypeIntern {
 
 impl TypeIntern {
     pub fn insert(&mut self, ty: TyContext) -> TyId {
-        let id = TyId::T(self.intern.len());
+        let mut hasher = FxHasher64::default();
+        ty.hash(&mut hasher);
+        let id = TyId::T(hasher.finish() as usize);
         self.intern.insert(id, ty);
         id
     }
 
-    pub fn get(&self, id: &TyId) -> &TyContext {
-        self.intern.get(&id).unwrap()
+    pub fn get(&self, id: &TyId) -> Option<&TyContext> {
+        self.intern.get(&id)
     }
 }

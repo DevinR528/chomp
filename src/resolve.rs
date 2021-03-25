@@ -1,9 +1,15 @@
-use std::hash::{Hash, Hasher};
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+};
 
 use fxhash::{FxHashMap, FxHashSet, FxHasher64};
-use syntax::ast::{
-    self, ArgListOwner, AstNode, AttrsOwner, GenericParamsOwner, LoopBodyOwner, ModuleItemOwner,
-    NameOwner, TypeBoundsOwner,
+use syntax::{
+    ast::{
+        self, ArgListOwner, AstNode, AttrsOwner, GenericParamsOwner, LoopBodyOwner,
+        ModuleItemOwner, NameOwner, TypeBoundsOwner,
+    },
+    SyntaxNode,
 };
 
 mod fir;
@@ -18,7 +24,9 @@ pub struct NodeId(usize);
 
 impl NodeId {
     pub fn new<T: AstNode>(node: &T) -> Self {
-        Self(node.syntax().index())
+        let mut hasher = FxHasher64::default();
+        node.syntax().hash(&mut hasher);
+        Self(hasher.finish() as usize)
     }
 }
 
@@ -27,19 +35,38 @@ pub struct ItemId(usize);
 
 impl ItemId {
     pub fn new<T: AstNode>(node: &T) -> Self {
-        Self(node.syntax().index())
+        let mut hasher = FxHasher64::default();
+        node.syntax().hash(&mut hasher);
+        Self(hasher.finish() as usize)
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Ident {
-    id: NodeId,
+    rep: String,
 }
 
-#[derive(Debug)]
+impl Ident {
+    pub fn new(rep: String) -> Self {
+        Self { rep }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum Stmt {
-    Local(),
+    Local(Ident, Scope),
     Expr(),
+}
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub struct TyContext {
+    ty: TyKind,
+}
+
+impl fmt::Display for TyContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("{}", self.ty))
+    }
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -66,6 +93,50 @@ pub enum TyKind {
     Empty,
 }
 
+impl fmt::Display for TyKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let string = match self {
+            TyKind::Slice(ty) => format!("[{}]", ty),
+            TyKind::Arr(ty, _) => format!("[{}]", ty),
+            TyKind::Ref(lt, mut_ty) => format!(
+                "&{}{}",
+                match lt {
+                    Lifetime::Anon => "`_".to_string(),
+                    Lifetime::Named(id) => id.rep.to_string(),
+                    Lifetime::None => "".to_string(),
+                },
+                if mut_ty.mutable {
+                    format!("mut {}", mut_ty.ty)
+                } else {
+                    format!("{}", mut_ty.ty)
+                }
+            ),
+            TyKind::FnPtr(bare) => format!("fn({:?})", bare),
+            TyKind::Tup(tup) => {
+                let mut s = "(".to_string();
+                for ty in tup {
+                    s += &format!("{}, ", ty);
+                }
+                s.truncate(s.len() - 2);
+                s.push(')');
+                s
+            }
+            TyKind::Path { qualified, p } => p.seg.iter().fold(String::new(), |mut s, id| {
+                s.push_str(&id.rep);
+                s
+            }),
+            TyKind::BuiltIn(bt) => bt.to_string(),
+            TyKind::TraitObj => "Trait Obj".to_string(),
+            TyKind::ImplTrait => "Impl Trait".to_string(),
+            TyKind::Paren(paren) => format!("({})", paren),
+            TyKind::RawPtr => "Raw Pointer".to_string(),
+            TyKind::Never => "!".to_string(),
+            TyKind::Empty => "()".to_string(),
+        };
+        f.write_str(&string)
+    }
+}
+
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum BuiltInKind {
     Str,
@@ -88,7 +159,35 @@ pub enum BuiltInKind {
     Isize,
     Bool,
 }
-
+impl fmt::Display for BuiltInKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                BuiltInKind::Str => "str",
+                BuiltInKind::ByteStr => "byte str",
+                BuiltInKind::Char => "char",
+                BuiltInKind::Byte => "byte",
+                BuiltInKind::F32 => "f32",
+                BuiltInKind::F64 => "f64",
+                BuiltInKind::U8 => "u8",
+                BuiltInKind::U16 => "u16",
+                BuiltInKind::U32 => "u32",
+                BuiltInKind::U64 => "u64",
+                BuiltInKind::U128 => "u128",
+                BuiltInKind::Usize => "usize",
+                BuiltInKind::I8 => "i8",
+                BuiltInKind::I16 => "i16",
+                BuiltInKind::I32 => "i32",
+                BuiltInKind::I64 => "i64",
+                BuiltInKind::I128 => "i128",
+                BuiltInKind::Isize => "isize",
+                BuiltInKind::Bool => "bool",
+            }
+        )
+    }
+}
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum Lifetime {
     Anon,
@@ -114,11 +213,6 @@ pub struct Path {
 pub enum Qualified {
     Empty,
     Type { ty: Path, pos: usize },
-}
-
-#[derive(Debug)]
-pub struct TyContext {
-    ty: TyKind,
 }
 
 #[derive(Debug)]
@@ -171,31 +265,39 @@ pub enum ScopeKind {
     Item,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Scope {
-    vis: FxHashSet<NodeId>,
+    vis: Vec<NodeId>,
     node_type: FxHashMap<NodeId, TyId>,
     ident_node: FxHashMap<Ident, NodeId>,
     kind: ScopeKind,
+    sub: Vec<Scope>,
+    ident_refs: FxHashMap<Ident, NodeId>,
 }
 
 impl Scope {
     pub fn new(kind: ScopeKind) -> Self {
         Self {
-            vis: FxHashSet::default(),
+            vis: Vec::default(),
             node_type: FxHashMap::default(),
             ident_node: FxHashMap::default(),
             kind,
+            sub: vec![],
+            ident_refs: FxHashMap::default(),
         }
     }
 
     pub fn add_node(&mut self, n: NodeId, ty: TyId) {
-        self.vis.insert(n);
+        if !self.vis.contains(&n) {
+            self.vis.push(n);
+        }
         self.node_type.insert(n, ty);
     }
 
     pub fn add_unknown_node(&mut self, n: NodeId) {
-        self.vis.insert(n);
+        if !self.vis.contains(&n) {
+            self.vis.push(n);
+        }
         self.node_type
             .insert(n, TyId::Unknown(self.node_type.len()));
     }
@@ -203,14 +305,33 @@ impl Scope {
     pub fn add_ident(&mut self, id: Ident, nid: NodeId) {
         self.ident_node.insert(id, nid);
     }
+
+    pub fn add_ident_ref(&mut self, id: Ident, nid: NodeId) {
+        self.ident_refs.insert(id, nid);
+    }
+
+    pub fn add_sub_scope(&mut self, scope: Scope) {
+        self.sub.push(scope)
+    }
 }
 
-#[derive(Debug)]
 pub struct TypeResolver {
     types: TypeIntern,
     items: FxHashMap<ItemId, ItemContext>,
     mod_scope: Scope,
-    interactions: FxHashMap<NodeId, Vec<NodeId>>,
+    nodes: FxHashMap<NodeId, SyntaxNode>,
+}
+
+impl fmt::Debug for TypeResolver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TypeResolver")
+            .field("types", &self.types)
+            .field("items", &self.items)
+            .field("mod_scope", &self.mod_scope)
+            .field("nodes", &format!("{:?}", self.nodes))
+            // .field("nodes", &self.nodes)
+            .finish()
+    }
 }
 
 impl TypeResolver {
@@ -219,7 +340,7 @@ impl TypeResolver {
             types: TypeIntern::default(),
             items: FxHashMap::default(),
             mod_scope,
-            interactions: FxHashMap::default(),
+            nodes: FxHashMap::default(),
         }
     }
 
@@ -234,6 +355,68 @@ impl TypeResolver {
         resolver.mod_scope = scope;
 
         resolver
+    }
+
+    pub fn unify(&self) {
+        fn _unify(
+            scope: &Scope,
+            parent: Option<&Scope>,
+            init_ty: Option<TyId>,
+            types: &TypeIntern,
+        ) -> Option<TyId> {
+            let mut ty = init_ty;
+            for sub in &scope.sub {
+                ty = _unify(sub, Some(&scope), ty, types);
+            }
+
+            let mut node_ty = init_ty;
+            for (node, ty) in &scope.node_type {
+                node_ty = cheap_unify(Some(*ty), node_ty, types);
+            }
+
+            cheap_unify(ty, node_ty, types)
+        }
+
+        fn _name_res(
+            scope: &Scope,
+            parent: Option<&Scope>,
+            idents: &FxHashMap<Ident, Option<TyId>>,
+        ) -> Option<TyId> {
+            for sub in &scope.sub {
+                if let Some(ty) = _name_res(sub, Some(&scope), idents) {
+                    return Some(ty);
+                }
+            }
+
+            for id in scope.ident_refs.keys() {
+                if let Some((_, ty)) = idents.iter().find(|(i, _)| i == &id) {
+                    return ty.map(|t| t);
+                }
+            }
+
+            None
+        }
+
+        let mut idents = FxHashMap::default();
+
+        for (id, item) in &self.items {
+            match &item.kind {
+                ItemKind::Fn(func) => {
+                    for stmt in &func.body.stmts {
+                        match stmt {
+                            Stmt::Local(ident, scope) => {
+                                let ty = _name_res(scope, Some(&self.mod_scope), &idents);
+                                idents.insert(
+                                    ident.clone(),
+                                    _unify(scope, Some(&self.mod_scope), ty, &self.types),
+                                );
+                            }
+                            Stmt::Expr() => {}
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn alloc_item(&mut self, scope: &mut Scope, item: &ast::Item) {
@@ -272,7 +455,12 @@ impl TypeResolver {
 
         // Add the function name and type for call Exprs
         mod_scope.add_node(nid, ret);
+        let ident = Ident {
+            rep: func.name().unwrap().to_string(),
+        };
+        mod_scope.add_ident(ident, nid);
 
+        self.nodes.insert(nid, func.syntax().clone());
         self.items.insert(
             id,
             ItemContext {
@@ -289,15 +477,19 @@ impl TypeResolver {
     }
 
     pub fn alloc_body(&mut self, scope: &mut Scope, blk: ast::BlockExpr) -> BodyContext {
-        let stmts = vec![];
+        let mut stmts = vec![];
 
         for stmt in blk.statements() {
             match stmt {
                 ast::Stmt::ExprStmt(expr) => {
-                    self.alloc_expr(scope, expr.expr().unwrap());
+                    let ty = self.alloc_expr(scope, expr.expr().unwrap());
+                    stmts.push(Stmt::Expr())
                 }
                 ast::Stmt::Item(item) => self.alloc_item(scope, &item),
-                ast::Stmt::LetStmt(stmt) => self.alloc_let(scope, stmt),
+                ast::Stmt::LetStmt(stmt) => {
+                    let (ident, node) = self.alloc_let(scope, stmt);
+                    stmts.push(Stmt::Local(ident, node));
+                }
             }
         }
 
@@ -309,14 +501,18 @@ impl TypeResolver {
 
         if let Some(this) = params.self_param() {
             todo!();
-            scope.vis.insert(NodeId(0));
+            scope.vis.push(NodeId(0));
         }
 
         for param in params.params() {
+            let nid = NodeId::new(&param);
             let ident = self.alloc_pat(param.pat().unwrap());
             let ty = self.alloc_ty(param.ty().unwrap());
-            scope.add_node(ident.id, ty);
-            scope.add_ident(ident, ident.id);
+
+            self.nodes.insert(nid, param.syntax().clone());
+
+            scope.add_node(nid, ty);
+            scope.add_ident(ident.clone(), nid);
 
             args.push(ArgContext { ident, ty });
         }
@@ -324,24 +520,49 @@ impl TypeResolver {
         args
     }
 
-    pub fn alloc_let(&mut self, scope: &mut Scope, loc: ast::LetStmt) {
-        let ident = self.alloc_pat(loc.pat().unwrap());
-        let nid = self.alloc_expr(scope, loc.initializer().unwrap());
-        scope.add_ident(ident, nid);
+    pub fn alloc_let(&mut self, scope: &mut Scope, loc: ast::LetStmt) -> (Ident, Scope) {
+        let nid = NodeId::new(&loc);
+        let mut sub = Scope::new(ScopeKind::NormalBlock);
 
-        if let Some(t) = loc.ty() {
-            let tid = self.alloc_ty(t);
-            scope.add_node(nid, tid);
+        let ident = self.alloc_pat(loc.pat().unwrap());
+        let (expr_node, ty) = self.alloc_expr(&mut sub, loc.initializer().unwrap());
+
+        self.nodes.insert(nid, loc.syntax().clone());
+
+        scope.add_ident(ident.clone(), expr_node);
+        scope.add_sub_scope(sub.clone());
+
+        if let Some(t) = cheap_unify(ty, loc.ty().map(|t| self.alloc_ty(t)), &self.types) {
+            scope.add_node(nid, t);
         } else {
-            scope.add_unknown_node(nid)
+            scope.add_unknown_node(nid);
         }
+
+        (ident, sub)
     }
 
-    pub fn alloc_expr(&mut self, scope: &mut Scope, expr: ast::Expr) -> NodeId {
+    pub fn alloc_expr(&mut self, scope: &mut Scope, expr: ast::Expr) -> (NodeId, Option<TyId>) {
         match expr {
             ast::Expr::ArrayExpr(_) => todo!("ArrayExpr"),
             ast::Expr::AwaitExpr(_) => todo!("AwaitExpr"),
-            ast::Expr::BinExpr(_) => todo!("BinExpr"),
+            ast::Expr::BinExpr(bin) => {
+                let nid = NodeId::new(&bin);
+                let mut sub = Scope::new(ScopeKind::NormalBlock);
+
+                self.nodes.insert(nid, bin.syntax().clone());
+
+                let (_node, lhs_ty) = self.alloc_expr(&mut sub, bin.lhs().unwrap());
+                let (_node, rhs_ty) = self.alloc_expr(&mut sub, bin.rhs().unwrap());
+
+                scope.add_sub_scope(sub);
+                if let Some(t) = cheap_unify(lhs_ty, rhs_ty, &self.types) {
+                    scope.add_node(nid, t);
+                    (nid, Some(t))
+                } else {
+                    scope.add_unknown_node(nid);
+                    (nid, None)
+                }
+            }
             ast::Expr::BlockExpr(_) => todo!("BlockExpr"),
             ast::Expr::BoxExpr(_) => todo!("BoxExpr"),
             ast::Expr::BreakExpr(_) => todo!("BreakExpr"),
@@ -356,17 +577,21 @@ impl TypeResolver {
             ast::Expr::IndexExpr(_) => todo!("IndexExpr"),
             ast::Expr::Literal(lit) => {
                 let nid = NodeId::new(&lit);
+                if self.nodes.contains_key(&nid) {
+                    panic!("{:?}", lit);
+                }
+                self.nodes.insert(nid, lit.syntax().clone());
 
-                match lit.kind() {
+                let ty = match lit.kind() {
                     ast::LiteralKind::String(s) => {
                         let tyid = self.types.insert(TyContext {
                             ty: TyKind::BuiltIn(BuiltInKind::Str),
                         });
                         scope.add_node(nid, tyid);
+                        (nid, Some(tyid))
                     }
                     ast::LiteralKind::ByteString(bs) => todo!(),
                     ast::LiteralKind::IntNumber(int) => {
-                        let val = int.value().unwrap();
                         if let Some(suf) = int.suffix() {
                             let ty = match suf {
                                 "u8" => TyContext {
@@ -409,12 +634,14 @@ impl TypeResolver {
                             };
                             let tyid = self.types.insert(ty);
                             scope.add_node(nid, tyid);
+                            (nid, Some(tyid))
                         } else {
                             scope.add_unknown_node(nid);
-                        };
+                            (nid, None)
+                        }
                     }
                     ast::LiteralKind::FloatNumber(f) => {
-                        let kind = if let Some(suf) = f.suffix() {
+                        if let Some(suf) = f.suffix() {
                             match suf {
                                 "f32" => todo!(),
                                 "f64" => todo!(),
@@ -422,7 +649,8 @@ impl TypeResolver {
                             }
                         } else {
                             scope.add_unknown_node(nid);
-                        };
+                            (nid, None)
+                        }
                     }
                     ast::LiteralKind::Char => {
                         todo!()
@@ -435,9 +663,10 @@ impl TypeResolver {
                             ty: TyKind::BuiltIn(BuiltInKind::Bool),
                         });
                         scope.add_node(nid, tyid);
+                        (nid, Some(tyid))
                     }
                 };
-                nid
+                ty
             }
             ast::Expr::LoopExpr(_) => todo!("LoopExpr"),
             ast::Expr::MacroCall(_) => todo!("MacroCall"),
@@ -445,7 +674,24 @@ impl TypeResolver {
             ast::Expr::MatchExpr(_) => todo!("MatchExpr"),
             ast::Expr::MethodCallExpr(_) => todo!("MethodCallExpr"),
             ast::Expr::ParenExpr(_) => todo!("ParenExpr"),
-            ast::Expr::PathExpr(_) => todo!("PathExpr"),
+            ast::Expr::PathExpr(path) => {
+                let nid = NodeId::new(&path);
+                self.nodes.insert(nid, path.syntax().clone());
+                scope.add_unknown_node(nid);
+                scope.add_ident_ref(
+                    Ident::new(
+                        path.path()
+                            .unwrap()
+                            .as_single_segment()
+                            .unwrap()
+                            .name_ref()
+                            .unwrap()
+                            .to_string(),
+                    ),
+                    nid,
+                );
+                (nid, None)
+            }
             ast::Expr::PrefixExpr(_) => todo!("PrefixExpr"),
             ast::Expr::RangeExpr(_) => todo!("RangeExpr"),
             ast::Expr::RecordExpr(_) => todo!("RecordExpr"),
@@ -483,8 +729,10 @@ impl TypeResolver {
     fn alloc_pat(&mut self, pat: ast::Pat) -> Ident {
         match pat {
             ast::Pat::IdentPat(ident) => {
-                let id = NodeId::new(&ident);
-                Ident { id }
+                let name = ident.name().unwrap();
+                Ident {
+                    rep: name.to_string(),
+                }
             }
             ast::Pat::BoxPat(_) => todo!(),
             ast::Pat::RestPat(_) => todo!(),
@@ -492,7 +740,7 @@ impl TypeResolver {
             ast::Pat::MacroPat(_) => todo!(),
             ast::Pat::OrPat(_) => todo!(),
             ast::Pat::ParenPat(_) => todo!(),
-            ast::Pat::PathPat(_) => todo!(),
+            ast::Pat::PathPat(path) => todo!("{:#?}", path),
             ast::Pat::WildcardPat(_) => todo!(),
             ast::Pat::RangePat(_) => todo!(),
             ast::Pat::RecordPat(_) => todo!(),
@@ -502,5 +750,22 @@ impl TypeResolver {
             ast::Pat::TupleStructPat(_) => todo!(),
             ast::Pat::ConstBlockPat(_) => todo!(),
         }
+    }
+}
+
+pub fn cheap_unify(a: Option<TyId>, b: Option<TyId>, types: &TypeIntern) -> Option<TyId> {
+    match (a, b) {
+        (Some(a @ TyId::T(_)), Some(b @ TyId::T(_))) => {
+            if types.get(&a) == types.get(&b) {
+                Some(a)
+            } else {
+                println!("a {:?} b {:?}", types.get(&a), types.get(&b));
+                println!("a {:?} b {:?}", a, b);
+                None
+            }
+        }
+        (Some(a @ TyId::T(_)), None) => Some(a),
+        (None, Some(b @ TyId::T(_))) => Some(b),
+        (_, _) => None,
     }
 }
