@@ -11,22 +11,30 @@ use base_db::{
     FileLoaderDelegate, FileSet, SourceDatabase, SourceDatabaseExt, SourceRoot, SourceRootId,
     Upcast, VfsPath,
 };
+use hir::{ItemInNs, Visibility};
 use hir_def::{
     body::{Body, BodySourceMap},
+    data::{ConstData, FunctionData},
     db::DefDatabase,
     item_scope::ItemScope,
     nameres::DefMap,
+    per_ns::PerNs,
     src::HasSource,
+    visibility::RawVisibility,
     AssocItemId, DefWithBodyId, LocalModuleId, Lookup, ModuleDefId, ModuleId,
 };
 use hir_expand::{db::AstDatabase, InFile};
-use hir_ty::{self as hir, db::HirDatabase, display::HirDisplay, InferenceResult};
+use hir_ty::{db::HirDatabase, display::HirDisplay, InferenceResult};
 use ide_db::symbol_index::{self, SymbolsDatabase};
 use rustc_hash::{FxHashMap, FxHashSet};
 use syntax::{
     ast::{IdentPat, NameOwner},
     AstNode, SyntaxNode, TextRange,
 };
+
+mod low;
+
+use low::FnBuilder;
 
 #[salsa::database(
     base_db::SourceDatabaseExtStorage,
@@ -124,8 +132,10 @@ impl TypeResolver {
         let durability = Durability::HIGH;
 
         // TODO: loop over crates when we do that...
-        let lib_roots = (0..vec![root.clone()].len())
-            .map(|i| SourceRootId(i as u32))
+        let lib_roots = root
+            .iter()
+            .enumerate()
+            .map(|(i, _)| SourceRootId(i as u32))
             .collect::<FxHashSet<_>>();
 
         db.set_library_roots_with_durability(Arc::new(lib_roots), durability);
@@ -193,15 +203,43 @@ impl TypeResolver {
         id: LocalModuleId,
         def_ids: &mut Vec<DefWithBodyId>,
     ) {
+        let mut mod_name = vec![];
+        let mut curr_mod = id;
+
         for decl in def_map[id].scope.declarations() {
             match decl {
                 ModuleDefId::FunctionId(it) => {
-                    let def = it.into();
-                    def_ids.push(def);
-                    let body = self.body(def);
+                    let func: Arc<FunctionData> = self.function_data(it);
+                    let (body, source_map): (Arc<Body>, Arc<BodySourceMap>) =
+                        self.body_with_source_map(it.into());
+                    let infer: Arc<InferenceResult> = self.infer(it.into());
+
+                    let mut not_root = true;
+                    let mut curr = decl;
+                    while let Some(mod_) = curr.module(self) {
+                        if let Some(parent) = mod_.containing_module(self) {
+                            curr = parent.into();
+                            if let Some((name, loc)) = def_map[parent.local_id]
+                                .children
+                                .iter()
+                                .find(|(name, id)| &mod_.local_id == *id)
+                            {
+                                mod_name.push(name.clone());
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+
+                    mod_name.reverse();
+                    let func = self.build_fn(&func, &body, &source_map, &infer, &mod_name);
+
                     self.walk_body(&body, def_ids);
                 }
                 ModuleDefId::ConstId(it) => {
+                    let konst: Arc<ConstData> = self.const_data(it);
+                    println!("{:?}", konst);
+
                     let def = it.into();
                     def_ids.push(def);
 
@@ -257,6 +295,17 @@ impl TypeResolver {
         module.def_map(self)
     }
 
+    fn build_fn(
+        &self,
+        func: &FunctionData,
+        body: &Body,
+        map: &BodySourceMap,
+        infer: &InferenceResult,
+        path: &[hir::Name],
+    ) -> FnBuilder {
+        FnBuilder::new(func, body, map, infer, path)
+    }
+
     fn module_from_file(&self, id: FileId) -> ModuleId {
         for &krate in self.relevant_crates(id).iter() {
             let def_map: Arc<DefMap> = self.crate_def_map(krate);
@@ -267,5 +316,30 @@ impl TypeResolver {
             }
         }
         unreachable!("Wrong FileId given")
+    }
+}
+
+fn into_vis(visibility: &RawVisibility, id: Option<ModuleId>) -> Visibility {
+    println!("{:?}", visibility);
+    match visibility {
+        RawVisibility::Module(mod_) => Visibility::Module(id.unwrap()),
+        RawVisibility::Public => Visibility::Public,
+    }
+}
+
+fn match_with(item: ItemInNs, per_ns: PerNs) -> Option<Visibility> {
+    match item {
+        ItemInNs::Types(def) => per_ns
+            .types
+            .filter(|(other_def, _)| *other_def == def)
+            .map(|(_, vis)| vis),
+        ItemInNs::Values(def) => per_ns
+            .values
+            .filter(|(other_def, _)| *other_def == def)
+            .map(|(_, vis)| vis),
+        ItemInNs::Macros(def) => per_ns
+            .macros
+            .filter(|(other_def, _)| *other_def == def)
+            .map(|(_, vis)| vis),
     }
 }

@@ -9,13 +9,13 @@ edition = "2018"
 [dependencies]
 unicode-xid = "0.2.0"
 rustc-hash = "1.1.0"
-syntax = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
-base_db = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
-hir = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
-hir_def = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
-hir_ty = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
-hir_expand = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
-ide_db = { git = "https://github.com/rust-analyzer/rust-analyzer.git" }
+syntax = { path = "../__forks__/rust-analyzer/crates/syntax" }
+base_db = { path = "../__forks__/rust-analyzer/crates/base_db" }
+hir = { path = "../__forks__/rust-analyzer/crates/hir" }
+hir_def = { path = "../__forks__/rust-analyzer/crates/hir_def" }
+hir_ty = { path = "../__forks__/rust-analyzer/crates/hir_ty" }
+hir_expand = { path = "../__forks__/rust-analyzer/crates/hir_expand" }
+ide_db = { path = "../__forks__/rust-analyzer/crates/ide_db" }
 
 
 chalk-solve = { version = "0.60", default-features = false }
