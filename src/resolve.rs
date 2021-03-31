@@ -11,11 +11,13 @@ use base_db::{
     FileLoaderDelegate, FileSet, SourceDatabase, SourceDatabaseExt, SourceRoot, SourceRootId,
     Upcast, VfsPath,
 };
+use chalk_ir::FnDefId;
 use hir::{ItemInNs, Visibility};
 use hir_def::{
     body::{Body, BodySourceMap},
     data::{ConstData, FunctionData},
     db::DefDatabase,
+    expr::{Expr, Statement},
     item_scope::ItemScope,
     nameres::DefMap,
     per_ns::PerNs,
@@ -24,7 +26,9 @@ use hir_def::{
     AssocItemId, DefWithBodyId, LocalModuleId, Lookup, ModuleDefId, ModuleId,
 };
 use hir_expand::{db::AstDatabase, InFile};
-use hir_ty::{db::HirDatabase, display::HirDisplay, InferenceResult};
+use hir_ty::{
+    db::HirDatabase, display::HirDisplay, CallableDefId, InferenceResult, Interner, TyKind,
+};
 use ide_db::symbol_index::{self, SymbolsDatabase};
 use rustc_hash::{FxHashMap, FxHashSet};
 use syntax::{
@@ -32,6 +36,7 @@ use syntax::{
     AstNode, SyntaxNode, TextRange,
 };
 
+mod inst;
 mod low;
 
 use low::FnBuilder;
@@ -214,7 +219,6 @@ impl TypeResolver {
                         self.body_with_source_map(it.into());
                     let infer: Arc<InferenceResult> = self.infer(it.into());
 
-                    let mut not_root = true;
                     let mut curr = decl;
                     while let Some(mod_) = curr.module(self) {
                         if let Some(parent) = mod_.containing_module(self) {
@@ -232,9 +236,12 @@ impl TypeResolver {
                     }
 
                     mod_name.reverse();
-                    let func = self.build_fn(&func, &body, &source_map, &infer, &mod_name);
 
+                    // Build the items in the body first so they can be called from the
+                    // func we are about to build.
                     self.walk_body(&body, def_ids);
+
+                    let func = self.build_fn(&func, &body, &source_map, &infer, &mod_name);
                 }
                 ModuleDefId::ConstId(it) => {
                     let konst: Arc<ConstData> = self.const_data(it);
@@ -263,7 +270,7 @@ impl TypeResolver {
                     }
                 }
                 ModuleDefId::ModuleId(it) => self.walk_module(def_map, it.local_id, def_ids),
-                _ => (),
+                thing => todo!("{:?}", thing),
             }
         }
 
@@ -295,15 +302,48 @@ impl TypeResolver {
         module.def_map(self)
     }
 
-    fn build_fn(
+    fn build_fn<'a>(
         &self,
         func: &FunctionData,
-        body: &Body,
+        body: &'a Body,
         map: &BodySourceMap,
-        infer: &InferenceResult,
+        infer: &'a InferenceResult,
         path: &[hir::Name],
-    ) -> FnBuilder {
-        FnBuilder::new(func, body, map, infer, path)
+    ) -> FnBuilder<'a> {
+        let mut calls = FxHashMap::default();
+        if let Expr::Block {
+            id,
+            statements,
+            tail,
+            label,
+        } = &body[body.body_expr]
+        {
+            for stmt in statements {
+                match stmt {
+                    Statement::Let {
+                        pat,
+                        type_ref,
+                        initializer: Some(init),
+                    } => {
+                        if let Expr::Call { callee, .. } = body[*init] {
+                            if let Some(TyKind::FnDef(id, sub)) = &infer
+                                .type_of_expr
+                                .get(callee)
+                                .map(|t| t.interned(&Interner))
+                            {
+                                CallableDefId::from(*id);
+                            }
+                        }
+                    }
+                    Statement::Expr(ex) => if let Expr::Call { callee, .. } = body[*ex] {},
+                    _ => {}
+                }
+            }
+
+            if let Some(ret) = tail {}
+        }
+
+        FnBuilder::new(func, body, map, infer, path, calls)
     }
 
     fn module_from_file(&self, id: FileId) -> ModuleId {
