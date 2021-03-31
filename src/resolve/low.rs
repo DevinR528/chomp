@@ -203,7 +203,7 @@ pub enum Opp {
     Konst(Rval),
     Named {
         lvar: Lvar,
-        rval: Box<Opp>,
+        opp: Box<Opp>,
         offset: usize,
     },
     BinOp {
@@ -222,7 +222,7 @@ impl Opp {
     pub fn size(&self) -> usize {
         match self {
             Opp::Konst(r) => r.size(),
-            Opp::Named { rval, .. } => rval.size(),
+            Opp::Named { opp: rval, .. } => rval.size(),
             Opp::BinOp { l, r, op } => match op {
                 BinaryOp::LogicOp(_) => r.size(),
                 BinaryOp::ArithOp(_) => r.size(),
@@ -242,7 +242,7 @@ pub struct BranchBuilder {}
 
 #[derive(Clone, Debug)]
 pub struct StmtBuilder<'a> {
-    call_map: FxHashMap<ExprId, Rval>,
+    call_map: FxHashMap<ExprId, Ty>,
     lvars: FxHashMap<Lvar, Opp>,
     offset_map: FxHashMap<Lvar, Location>,
     rep: Vec<Opp>,
@@ -254,10 +254,10 @@ impl<'a> StmtBuilder<'a> {
     pub fn new(
         infer: &'a InferenceResult,
         body: &'a Body,
-        call_map: FxHashMap<ExprId, Expr>,
+        call_map: FxHashMap<ExprId, Ty>,
     ) -> Self {
         Self {
-            call_map: FxHashMap::default(),
+            call_map,
             lvars: FxHashMap::default(),
             offset_map: FxHashMap::default(),
             rep: vec![],
@@ -273,7 +273,7 @@ impl<'a> StmtBuilder<'a> {
                 let lvar = Lvar::Ident(name.clone());
                 let offset = rval.size();
                 let var = Opp::Named {
-                    rval,
+                    opp: rval,
                     lvar: lvar.clone(),
                     offset,
                 };
@@ -326,7 +326,7 @@ impl<'a> StmtBuilder<'a> {
                     })
                     .collect::<Vec<_>>();
 
-                let ret = self.call_map.get(callee).unwrap().clone();
+                let ret = self.return_val(self.call_map.get(callee));
 
                 let call = if let Expr::Path(path) = &self.body[*callee] {
                     Opp::Call {
@@ -346,9 +346,9 @@ impl<'a> StmtBuilder<'a> {
         }
     }
 
-    fn return_size(&self, ty: Option<&Ty>) -> usize {
+    fn return_val(&self, ty: Option<&Ty>) -> Rval {
         match ty.unwrap().interned(&Interner) {
-            TyKind::Scalar(scalar) => Rval::from_scalar(scalar).size(),
+            TyKind::Scalar(scalar) => Rval::from_scalar(scalar),
             t => todo!("{:?}", t),
         }
     }
@@ -363,7 +363,7 @@ impl<'a> StmtBuilder<'a> {
                 Opp::Named {
                     lvar,
                     offset: size,
-                    rval,
+                    opp: rval,
                 } => {
                     offset += size;
                     let dst = Location::RegAddr {
@@ -418,7 +418,9 @@ impl<'a> StmtBuilder<'a> {
                         src,
                     });
                 }
-                Location::Label(name.repr())
+                instructions.push(Instruction::Call(Location::Label(name.repr())));
+
+                Location::Register(Register::RAX)
             }
         };
 
@@ -441,7 +443,7 @@ impl<'a> FnBuilder<'a> {
         map: &BodySourceMap,
         infer: &'a InferenceResult,
         path: &[hir::Name],
-        call_map: FxHashMap<ExprId, Expr>,
+        call_map: FxHashMap<ExprId, Ty>,
     ) -> Self {
         let mut name = path.to_vec();
         name.push(func.name.clone());

@@ -331,7 +331,9 @@ impl TypeResolver {
                                 .get(callee)
                                 .map(|t| t.interned(&Interner))
                             {
-                                CallableDefId::from(*id);
+                                let def = hir_ty::traits::chalk::from_chalk(self, *id);
+                                let sig = self.callable_item_signature(def).subst(sub);
+                                calls.insert(callee, sig.ret().clone());
                             }
                         }
                     }
